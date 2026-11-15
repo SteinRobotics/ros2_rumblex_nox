@@ -1,0 +1,3 @@
+node_communication:
+  ros__parameters:
+    keyword_threshold: 0.5

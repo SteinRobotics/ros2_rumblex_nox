@@ -1,0 +1,181 @@
+#pragma once
+
+#include <map>
+#include <memory>
+#include <rclcpp/rclcpp.hpp>
+
+#include "nox_utils/units.hpp"
+#include "velocity.hpp"
+
+namespace brain {
+
+using namespace mp_units;
+using namespace mp_units::si::unit_symbols;
+using mp_units::angular::unit_symbols::deg;
+using mp_units::angular::unit_symbols::rad;
+namespace units = nox_geometry::units;
+
+struct Parameters {
+    struct TorsoRoll {
+        units::Angle torso_max_roll = 0.0 * deg;
+        units::Angle torso_max_pitch = 0.0 * deg;
+    };
+
+    struct LegWave {
+        units::Length leg_lift_height = 0.0 * m;
+    };
+
+    struct Crawl {
+        units::Angle head_yaw_amplitude = 0.0 * deg;
+        units::Length gait_step_length = 0.0 * m;
+        units::Length leg_lift_height = 0.0 * m;
+    };
+
+    struct Ripple {
+        units::Angle head_yaw_amplitude = 0.0 * deg;
+        units::Length gait_step_length = 0.0 * m;
+        units::Length leg_lift_height = 0.0 * m;
+    };
+
+    struct SinglePose {
+        units::Angle head_max_pitch = 0.0 * deg;
+    };
+
+    struct TestLegs {
+        units::Angle torso_coxa_delta = 0.0 * deg;
+        units::Angle coxa_femur_delta = 0.0 * deg;
+        units::Angle femur_tibia_delta = 0.0 * deg;
+    };
+
+    struct Tripod {
+        units::Angle head_yaw_amplitude = 0.0 * deg;
+        units::Length gait_step_length = 0.0 * m;
+        units::Length leg_lift_height = 0.0 * m;
+    };
+
+    struct Wave {
+        units::Angle head_yaw_amplitude = 0.0 * deg;
+        units::Length gait_step_length = 0.0 * m;
+        units::Length leg_lift_height = 0.0 * m;
+    };
+
+    struct Watch {
+        units::Angle torso_max_yaw = 0.0 * deg;
+        units::Angle head_max_yaw = 0.0 * deg;
+    };
+
+    struct MoveCombined {
+        double velocity_threshold_wave_ripple{0.3};
+        double velocity_threshold_ripple_tripod{0.6};
+        double hysteresis_margin{0.05};
+        units::LinearVelocity max_linear_velocity = 0.01 * m / s;
+        units::AngularVelocity max_angular_velocity = 0.01 * rad / s;
+    };
+
+    TorsoRoll torso_roll;
+    LegWave leg_wave;
+    Crawl crawl;
+    Ripple ripple;
+    SinglePose single_pose;
+    TestLegs test_legs;
+    Tripod tripod;
+    Wave wave;
+    Watch watch;
+    MoveCombined move_combined;
+
+    static Parameters declare(std::shared_ptr<rclcpp::Node> node);
+};
+
+inline Parameters Parameters::declare(std::shared_ptr<rclcpp::Node> node) {
+    Parameters params;
+
+    // Generic Parameters
+    const auto torso_max_roll = node->declare_parameter<double>("gait.generic.torso_max_roll_deg") * deg;
+    const auto torso_max_pitch = node->declare_parameter<double>("gait.generic.torso_max_pitch_deg") * deg;
+    const auto head_max_yaw = node->declare_parameter<double>("gait.generic.head_max_yaw_deg") * deg;
+    const auto head_max_pitch = node->declare_parameter<double>("gait.generic.head_max_pitch_deg") * deg;
+
+    const auto leg_lift_height = node->declare_parameter<double>("gait.generic.leg_lift_height_m") * m;
+    const auto step_length = node->declare_parameter<double>("gait.generic.step_length_m") * m;
+
+    if (!std::isfinite(step_length.numerical_value_in(m)) || step_length <= 0.0 * m)
+        throw std::invalid_argument("gait.generic.step_length_m must be finite and positive");
+    if (!std::isfinite(leg_lift_height.numerical_value_in(m)) || leg_lift_height < 0.0 * m)
+        throw std::invalid_argument("gait.generic.leg_lift_height_m must be finite and nonnegative");
+
+    // Torso Roll
+    params.torso_roll.torso_max_roll = torso_max_roll;
+    params.torso_roll.torso_max_pitch = torso_max_pitch;
+
+    // Tripod
+    params.tripod.head_yaw_amplitude = node->declare_parameter<double>("gait.tripod.head_max_yaw_deg") * deg;
+    params.tripod.gait_step_length = step_length;
+    params.tripod.leg_lift_height = leg_lift_height;
+
+    // Crawl
+    params.crawl.head_yaw_amplitude =
+        node->declare_parameter<double>("gait.crawl.head_max_yaw_deg", 0.0) * deg;
+    params.crawl.gait_step_length = step_length;
+    params.crawl.leg_lift_height = leg_lift_height;
+
+    // Ripple
+    params.ripple.head_yaw_amplitude =
+        node->declare_parameter<double>("gait.ripple.head_max_yaw_deg", 10.0) * deg;
+    params.ripple.gait_step_length = step_length;
+    params.ripple.leg_lift_height = leg_lift_height;
+
+    // Wave
+    params.wave.head_yaw_amplitude = node->declare_parameter<double>("gait.wave.head_max_yaw_deg", 8.0) * deg;
+    params.wave.gait_step_length = step_length;
+    params.wave.leg_lift_height = leg_lift_height;
+
+    // Single Pose
+    params.single_pose.head_max_pitch = head_max_pitch;
+
+    // Leg Wave
+    params.leg_wave.leg_lift_height = node->declare_parameter<double>("gait.leg_wave.leg_lift_height_m") * m;
+
+    // Watch
+    params.watch.torso_max_yaw = node->declare_parameter<double>("gait.watch.torso_max_yaw_deg") * deg;
+    params.watch.head_max_yaw = head_max_yaw;
+
+    // MoveCombined
+    params.move_combined.velocity_threshold_wave_ripple =
+        node->declare_parameter<double>("gait.move_combined.velocity_threshold_wave_ripple", 0.3);
+    params.move_combined.velocity_threshold_ripple_tripod =
+        node->declare_parameter<double>("gait.move_combined.velocity_threshold_ripple_tripod", 0.6);
+    params.move_combined.hysteresis_margin =
+        node->declare_parameter<double>("gait.move_combined.hysteresis_margin", 0.05);
+    params.move_combined.max_linear_velocity = velocityLimit<m / s>(node, "max_velocity_linear");
+    params.move_combined.max_angular_velocity = velocityLimit<rad / s>(node, "max_velocity_rotation");
+    for (const auto& [name, limit] :
+         {std::pair{"gait.move_combined.max_linear_velocity_m_s",
+                    params.move_combined.max_linear_velocity.numerical_value_in(m / s)},
+          std::pair{"gait.move_combined.max_angular_velocity_rad_s",
+                    params.move_combined.max_angular_velocity.numerical_value_in(rad / s)}}) {
+        const double alias = node->declare_parameter<double>(name, limit);
+        if (!std::isfinite(alias) || std::abs(alias - limit) > 1e-12)
+            throw std::invalid_argument(std::string(name) + " must match the authoritative velocity limit");
+    }
+    const auto& combined = params.move_combined;
+    if (!(std::isfinite(combined.velocity_threshold_wave_ripple) &&
+          std::isfinite(combined.velocity_threshold_ripple_tripod) &&
+          std::isfinite(combined.hysteresis_margin) && combined.hysteresis_margin >= 0.0 &&
+          combined.velocity_threshold_wave_ripple > combined.hysteresis_margin &&
+          combined.velocity_threshold_ripple_tripod >
+              combined.velocity_threshold_wave_ripple + 2.0 * combined.hysteresis_margin &&
+          combined.velocity_threshold_ripple_tripod + combined.hysteresis_margin < 1.0))
+        throw std::invalid_argument("Invalid combined gait thresholds or hysteresis");
+
+    // Test Legs
+    params.test_legs.torso_coxa_delta =
+        node->declare_parameter<double>("gait.test_legs.torso_coxa_delta_deg") * deg;
+    params.test_legs.coxa_femur_delta =
+        node->declare_parameter<double>("gait.test_legs.coxa_femur_delta_deg") * deg;
+    params.test_legs.femur_tibia_delta =
+        node->declare_parameter<double>("gait.test_legs.femur_tibia_delta_deg") * deg;
+
+    return params;
+}
+
+}  // namespace brain

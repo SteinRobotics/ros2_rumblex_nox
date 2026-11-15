@@ -1,0 +1,10 @@
+# Run the built-in laydown transition while announcing the action.
+name: laydown
+trigger:
+  joystick: dpad_vertical_down
+  voice: commandLaydown
+actions:
+  - say: ich lege mich hin
+    movement:
+      name: SEQUENCE_LAYDOWN
+      duration_s: 1.5

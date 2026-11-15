@@ -1,0 +1,146 @@
+#!/usr/bin/env python3
+
+# Allow direct execution as well as package imports.
+if __package__ in (None, ""):
+    import sys
+    from pathlib import Path
+
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from robot_nox import EXPORT_DIR
+
+from build123d import Color, Compound, Pos, Rot, export_step
+from sympy import im
+from utils.ocp_utils import show
+
+from utils.colors import COLOR_BRASS, COLOR_DARK_GRAY
+
+import common.toe as toe
+import utils.spacer as spacer
+import robot_nox.torso_common as torso_common
+import robot_nox.torso_layer_0 as torso_layer_0
+import robot_nox.torso_layer_1 as torso_layer_1
+import robot_nox.torso_layer_2 as torso_layer_2
+import robot_nox.torso_layer_3 as torso_layer_3
+import robot_nox.torso_layer_4 as torso_layer_4
+import robot_nox.chassis_side as chassis_side
+
+SPACER_OUTER_DIAMETER = 5.0
+SPACER_INNER_DIAMETER = 3.0
+SPACER_LENGTH_0_to_1 = 15.0
+SPACER_LENGTH_1_to_2 = 32.0
+SPACER_LENGTH_TOP = torso_common.SPACER_LENGTH_TOP
+
+
+def build_assembly() -> Compound:
+    torso_layer_0_part = torso_layer_0.build_model(torso_layer_0.build_surface())
+    torso_layer_1_part = torso_layer_1.build_model(torso_layer_1.build_surface())
+    torso_layer_2_part = torso_layer_2.build_model(torso_layer_2.build_surface())
+    torso_layer_3_part = torso_layer_3.build_model(torso_layer_3.build_surface())
+    torso_layer_4_part = torso_layer_4.build_model(torso_layer_4.build_surface())
+    toe_part = toe.build_model()
+
+    spacer_part_0_1 = spacer.build_model(
+        outer_diameter=SPACER_OUTER_DIAMETER,
+        inner_diameter=SPACER_INNER_DIAMETER,
+        length=SPACER_LENGTH_0_to_1,
+    )
+    spacer_part_1_2 = spacer.build_model(
+        outer_diameter=SPACER_OUTER_DIAMETER,
+        inner_diameter=SPACER_INNER_DIAMETER,
+        length=SPACER_LENGTH_1_to_2,
+    )
+    spacer_part_top = spacer.build_model(
+        outer_diameter=SPACER_OUTER_DIAMETER,
+        inner_diameter=SPACER_INNER_DIAMETER,
+        length=SPACER_LENGTH_TOP,
+    )
+
+    torso_layer_0_part.color = COLOR_DARK_GRAY
+    torso_layer_1_part.color = COLOR_DARK_GRAY
+    torso_layer_2_part.color = COLOR_DARK_GRAY
+    torso_layer_3_part.color = COLOR_DARK_GRAY
+    torso_layer_4_part.color = COLOR_DARK_GRAY
+    toe_part.color = COLOR_DARK_GRAY
+    spacer_part_0_1.color = COLOR_BRASS
+    spacer_part_1_2.color = COLOR_BRASS
+    spacer_part_top.color = COLOR_BRASS
+
+    torso_layer_0_part.label = "torso_layer_0"
+    torso_layer_1_part.label = "torso_layer_1"
+    torso_layer_2_part.label = "torso_layer_2"
+    torso_layer_3_part.label = "torso_layer_3"
+    torso_layer_4_part.label = "torso_layer_4"
+    toe_part.label = "toe"
+
+    positions_for_toes = torso_layer_0.TOE_MOUNTING_HOLES
+    positions_for_spacers = torso_common.hole_locations
+
+    # --- Z-stack the layers, separated by spacer lengths ---
+    z_layer_0 = 0.0
+    z_spacer_0_1 = z_layer_0 + torso_common.THICKNESS
+    z_layer_1 = z_spacer_0_1 + SPACER_LENGTH_0_to_1
+    z_spacer_1_2 = z_layer_1 + torso_common.THICKNESS
+    z_layer_2 = z_spacer_1_2 + SPACER_LENGTH_1_to_2
+    z_spacer_top = z_layer_2 + torso_common.THICKNESS
+    z_layer_3 = z_spacer_top + SPACER_LENGTH_TOP
+
+    torso_layer_1_part = Pos(0, 0, z_layer_1) * torso_layer_1_part
+    torso_layer_1_part.label = "torso_layer_1"
+    torso_layer_2_part = Pos(0, 0, z_layer_2) * torso_layer_2_part
+    torso_layer_2_part.label = "torso_layer_2"
+    torso_layer_3_part = Pos(0, 0, z_layer_3) * torso_layer_3_part
+    torso_layer_3_part.label = "torso_layer_3"
+    torso_layer_4_part = Pos(0, 0, z_layer_3 + torso_common.THICKNESS) * torso_layer_4_part
+    torso_layer_4_part.label = "torso_layer_4"
+
+    # Toes at the bottom, using their given (x, y, z) positions as-is
+    toe_instances = []
+    for i, coord in enumerate(positions_for_toes):
+        x, y, z = coord
+        instance = Pos(x, y, z - toe.LITTLE_TOE_LENGTH) * Rot(X=180) * toe_part
+        instance.label = f"toe_{i}"
+        toe_instances.append(instance)
+
+    # Spacers repeat the same XY hole pattern at each of the three gap heights
+    spacer_instances = []
+    spacer_groups = [
+        (spacer_part_0_1, SPACER_LENGTH_0_to_1, z_spacer_0_1, "spacer_0_1"),
+        (spacer_part_1_2, SPACER_LENGTH_1_to_2, z_spacer_1_2, "spacer_1_2"),
+        (spacer_part_top, SPACER_LENGTH_TOP, z_spacer_top, "spacer_top"),
+    ]
+    for part, length, z, name in spacer_groups:
+        for i, loc in enumerate(positions_for_spacers):
+            instance = (Pos(0, 0, z + length / 2) * loc) * part
+            instance.label = f"{name}_{i}"
+            spacer_instances.append(instance)
+
+    assembly = Compound(
+        label="assembly_body",
+        children=[
+            torso_layer_0_part,
+            torso_layer_1_part,
+            torso_layer_2_part,
+            torso_layer_3_part,
+            torso_layer_4_part,
+            *chassis_side.build_plates(z_layer_1, z_layer_3),
+            *chassis_side.build_diagonal_plates(z_layer_2, z_layer_3),
+            *toe_instances,
+            *spacer_instances,
+        ],
+    )
+
+    return assembly
+
+
+def main() -> None:
+    assembly = build_assembly()
+    EXPORT_DIR.mkdir(parents=True, exist_ok=True)
+    (EXPORT_DIR / "step").mkdir(parents=True, exist_ok=True)
+    export_step(assembly, str(EXPORT_DIR / "step/assembly_body.step"))
+
+    show(assembly, name="assembly_body", clear=True)
+
+
+if __name__ == "__main__":
+    main()

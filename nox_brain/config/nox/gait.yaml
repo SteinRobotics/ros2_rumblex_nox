@@ -1,0 +1,59 @@
+node_brain:
+  ros__parameters:
+    #### GENERIC GAIT PARAMETERS ####
+    gait.generic.torso_max_roll_deg: 12.0  # deg
+    gait.generic.torso_max_pitch_deg: 12.0 # deg
+    gait.generic.head_max_yaw_deg: 30.0
+    gait.generic.head_max_pitch_deg: 20.0
+    gait.generic.leg_lift_height_m: 0.025      # [m]   // -0.05 + 0.025 = -0.025
+    gait.generic.step_length_m: 0.03     # [m]
+
+    #### GAIT TRIPOD PARAMETERS ####
+    gait.tripod.head_max_yaw_deg: 15.0 # deg
+
+    #### GAIT CRAWL PARAMETERS ####
+    gait.crawl.head_max_yaw_deg: 0.0                     # deg
+
+    #### GAIT RIPPLE PARAMETERS ####
+    gait.ripple.head_max_yaw_deg: 10.0                   # deg
+
+    #### GAIT WAVE PARAMETERS ####
+    gait.wave.head_max_yaw_deg: 8.0                      # deg
+
+    #### GAIT MOVE COMBINED PARAMETERS ####
+    gait.move_combined.velocity_threshold_wave_ripple: 0.3
+    gait.move_combined.velocity_threshold_ripple_tripod: 0.6
+    gait.move_combined.hysteresis_margin: 0.04
+    gait.move_combined.max_linear_velocity_m_s: 0.10   # must match brain max_velocity_linear
+    gait.move_combined.max_angular_velocity_rad_s: 0.40 # must match brain max_velocity_rotation
+
+    #### GAIT LEG WAVE PARAMETERS ####
+    gait.leg_wave.leg_lift_height_m: 0.03 # m
+
+    #### GAIT WATCH PARAMETERS ####
+    gait.watch.torso_max_yaw_deg: 10.0     # degree
+
+    #### GAIT TEST LEGS PARAMETERS ####
+    gait.test_legs.torso_coxa_delta_deg: 10.0
+    gait.test_legs.coxa_femur_delta_deg: 15.0
+    gait.test_legs.femur_tibia_delta_deg: 20.0
+
+    # Conservative starting values; validate gains and sensor axes before hardware use.
+    hold_distance:
+      range_topic: scan_1d
+      body_frame: base_link
+      distance_gain: 0.2
+      distance_deadband_m: 0.02
+      max_speed_m_s: 0.02
+      max_acceleration_m_s2: 0.02
+      freshness_s: 0.5
+      startup_timeout_s: 2.0
+    level_torso:
+      imu_topic: bno055/imu
+      body_frame: base_link
+      tilt_gain: 0.3
+      tilt_deadband_rad: 0.01745329252  # 1 degree
+      max_tilt_rad: 0.13962634016      # 8 degrees
+      max_tilt_rate_rad_s: 0.03490658504  # 2 degrees/second
+      freshness_s: 0.5
+      startup_timeout_s: 2.0

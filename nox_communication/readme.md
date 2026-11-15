@@ -1,0 +1,79 @@
+# Speech and wake-word recognition
+
+The configuration sets `keyword_threshold: 0.5`: a model score of 50% or higher
+triggers detection. This is a score threshold, not a measured recognition accuracy.
+The microphone must support 16 kHz mono signed 16-bit PCM; inference uses 80 ms frames.
+
+## Installation
+
+In the ROS Python virtual environment install the ONNX backend:
+
+```bash
+python -m pip install numpy scipy scikit-learn requests tqdm onnxruntime 'pygame-ce==2.5.8'
+python -m pip install --no-deps 'openwakeword==0.6.0'
+python -c 'from openwakeword.utils import download_models; download_models(model_names=["nox"])'
+```
+
+
+The explicit dependency installation avoids openWakeWord 0.6.0's unused Linux
+`tflite-runtime` dependency, which lacks wheels for newer Python versions. The
+one-time download installs the shared audio feature models in openWakeWord's package
+resources. Supply the private `nox.onnx` model in the package-local `models/` directory before building.
+Runtime recognition is offline and requires no access key.
+
+Use Pygame CE in the virtual environment; it supplies the same `pygame` imports.
+The system Pygame 2.6.1 imports `pkg_resources`, which validates the generated
+ROS entry point's complete dependency tree and fails on the intentionally absent
+`tflite-runtime`. Pygame CE uses `importlib.resources` instead. Installing it in
+the virtual environment takes precedence over the system Pygame package and
+survives colcon rebuilds; no generated launcher edits are needed. Avoid installing
+both `pygame` and `pygame-ce` with pip into the same virtual environment, since
+they provide the same module files.
+
+Build with the same Python interpreter and source the overlay using
+[BUILD.md](../BUILD.md#incremental-builds), then launch:
+
+```bash
+ros2 launch nox_communication communication_launch.py
+```
+
+Online recognition still requires Google speech credentials. Audio playback and
+microphone access require PortAudio and the existing audio dependencies.
+
+## Tests
+
+Install `pytest` and `onnx` in the environment above, then from this package run:
+
+```bash
+python -m pytest test
+```
+
+The keyword tests cover the robot model, the threshold boundary, cancellation,
+model validation, and real ONNX inference on silence. Measuring recognition accuracy
+requires labeled recordings of each name and background speech from the target microphones.
+
+Backend documentation: https://github.com/dscripka/openWakeWord
+
+## Audio lifecycle and deferred chat
+
+Chat is currently unavailable. The legacy implementation has been removed;
+`request_chat` logs a warning and publishes `OFF` so the brain does not wait forever.
+A local chat backend will be implemented separately.
+
+Speech synthesis runs in a background worker. The ROS timer processes worker results
+and polls playback completion. Recognition starts only after the wake response has
+finished playing. A new audio request cancels the previous request, and late worker
+results are discarded. New capture/synthesis waits for previous workers to exit without
+blocking ROS callbacks. Shutdown requests cancellation of all workers and allows a
+shared two-second grace period; outstanding network calls may outlive that period in
+daemon threads and cannot update the node afterward.
+
+TTS caches audio under `$XDG_CACHE_HOME/rumblex/tts` (normally
+`~/.cache/rumblex/tts`). Cache keys include the full text and language. Google TTS
+uses a network timeout; if unavailable, `espeak-ng` creates a WAV file which uses the
+same playback/completion path. Install the `espeak-ng` executable for this fallback.
+Existing package-local TTS caches are no longer used and may be removed manually.
+
+Google speech recognition respects an existing `GOOGLE_APPLICATION_CREDENTIALS`
+setting. The legacy package-local `keys/SERVICE_ACCOUNT_KEY.JSON` is used only when
+present and no credential environment setting exists.

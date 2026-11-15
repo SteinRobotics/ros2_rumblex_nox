@@ -1,0 +1,40 @@
+#pragma once
+
+#include <memory>
+
+#include "gait/gait_interfaces.hpp"
+#include "gait/pose_model.hpp"
+#include "nox_utils/geometry.hpp"
+
+namespace brain {
+
+using namespace mp_units;
+using namespace mp_units::si::unit_symbols;
+using mp_units::angular::unit_symbols::rad;
+
+// A simple gait that keeps the robot in a waiting (standing) posture while optionally cycling a single leg.
+// Initially copied from CLegRollGait and renamed. Behavior can be specialized later.
+class CWaitingGait : public ISequenceGait {
+   public:
+    explicit CWaitingGait(std::shared_ptr<CPoseModel> kinematics);
+    ~CWaitingGait() override = default;
+
+    void start(units::Duration duration_s, uint8_t direction) override;
+    bool update() override;
+    void requestStop() override;
+    void cancelStop() override;
+    EGaitState state() const override {
+        return state_;
+    }
+
+   private:
+    std::shared_ptr<CPoseModel> kinematics_;
+
+    EGaitState state_ = EGaitState::Stopped;
+
+    CPose torso_origin_;
+    std::map<ELegIndex, CPosition> toe_origins_;
+    units::Angle phase_ = 0.0 * rad;
+};
+
+}  // namespace brain

@@ -1,0 +1,10 @@
+# Run the built-in torso-roll gesture; its motion profile comes from the gait configuration.
+name: body_roll
+trigger:
+  joystick: button_x
+  voice: commandBodyRoll
+actions:
+  - say: Ich rolle den Rumpf
+    movement:
+      name: SEQUENCE_BODY_ROLL
+      duration_s: 4.0

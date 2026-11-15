@@ -1,0 +1,142 @@
+"""
+U shaped Bracket - build123d model
+
+A small U-shaped mounting bracket (e.g. servo / motor mount):
+  - Two vertical "ear" legs, 2mm thick sheet, with a rounded bottom, 
+    each carrying 4 mounting holes
+    (one Ø8mm centre hole, one Ø2mm hole above it, two Ø2mm holes
+    flanking it 14mm apart).
+  - A flat top plate joining the two legs, carrying three shaft holes
+    with four small mounting holes around each shaft hole.
+
+All dimensions taken from the reference drawing (mm).
+"""
+
+# Allow direct execution as well as package imports.
+if __package__ in (None, ""):
+    import sys
+    from pathlib import Path
+
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from pathlib import Path
+from build123d import *
+
+from common.export_utils import export_common_part
+from utils.ocp_utils import show
+
+# ---------------------------------------------------------------- params --
+PLATE_W = 41.0          # top plate overall width (X)
+PLATE_D = 25.0          # top plate depth, measured in plan view (Y)
+PLATE_T = 2.0           # top plate thickness (measured normal to its face)
+ 
+LEG_T = 2.0             # leg material thickness (X)
+LEG_H = 42              # leg height
+ 
+BIG_HOLE_D = 8.0
+SMALL_HOLE_D = 2.0
+HOLE_ROW_Z = PLATE_D / 2       # height of the centre hole from the bottom of the leg
+
+SERVO_HORN_HOLE_D = 2.0     # small screw holes for attaching the servo horn
+SERVO_HORN_BC_RADIUS = 7.0  # bolt-circle radius, centred on the leg's Ø8 hole
+SERVO_HORN_HOLE_COUNT = 4   # cross pattern: up / down / left / right
+ 
+SLOT_SPACING = 10.0
+ 
+
+# The plate's bottom face is flush with the legs' horizontal top edges.
+PLATE_PLANE = Plane(
+    origin=(0, 0, 0),
+    x_dir=(1, 0, 0),
+    z_dir=(0, 0, 1),
+)
+ 
+ 
+# ------------------------------------------------------------ leg profile --
+def leg_solid() -> Part:
+    r = PLATE_D / 2  # rounded-bottom radius
+ 
+    with BuildPart() as leg:
+        with BuildSketch(Plane.YZ):
+            with BuildLine():
+                Line((0, r), (0, LEG_H))                 # left (tall) edge
+                Line((0, LEG_H), (PLATE_D, LEG_H))    # top edge
+                Line((PLATE_D, LEG_H), (PLATE_D, r))  # right (short) edge
+                ThreePointArc((PLATE_D, r), (r, 0), (0, r))  # rounded bottom
+            make_face()
+        extrude(amount=LEG_T)
+ 
+        # centre Ø8 hole (servo shaft) + a 4-hole bolt circle around it
+        # (for the servo horn screws), on the leg's mid-plane
+        with BuildSketch(Plane.YZ):
+            with Locations((r, HOLE_ROW_Z)):
+                Circle(BIG_HOLE_D / 2)
+        extrude(amount=LEG_T, mode=Mode.SUBTRACT)
+ 
+        with BuildSketch(Plane.YZ):
+            with Locations((r, HOLE_ROW_Z)):
+                with PolarLocations(SERVO_HORN_BC_RADIUS, SERVO_HORN_HOLE_COUNT, start_angle=0):
+                    Circle(SERVO_HORN_HOLE_D / 2)
+        extrude(amount=LEG_T, mode=Mode.SUBTRACT)
+ 
+    return leg.part
+ 
+ 
+# -------------------------------------------------------------- top plate --
+def top_plate_solid() -> Part:
+    """Extrude the top plate upward from the legs' top edges."""
+ 
+    with BuildPart() as plate:
+        with BuildSketch(PLATE_PLANE):
+            Rectangle(PLATE_W, PLATE_D)
+        extrude(amount=PLATE_T)
+ 
+        # three servo-horn slots, evenly spaced along X, centred on the plate
+        # centre Ø8 hole (servo shaft) + a 4-hole bolt circle around it
+        # (for the servo horn screws), on the leg's mid-plane
+        with BuildSketch(PLATE_PLANE):
+            with Locations((-SLOT_SPACING, 0), (0, 0), (SLOT_SPACING, 0)):
+                Circle(BIG_HOLE_D / 2)
+        extrude(amount=PLATE_T, mode=Mode.SUBTRACT)
+        
+        with BuildSketch(PLATE_PLANE):
+            with Locations((-SLOT_SPACING, 0), (0, 0), (SLOT_SPACING, 0)):
+                with PolarLocations(SERVO_HORN_BC_RADIUS, SERVO_HORN_HOLE_COUNT, start_angle=45):
+                    Circle(SERVO_HORN_HOLE_D / 2)
+        extrude(amount=PLATE_T, mode=Mode.SUBTRACT)
+ 
+ 
+    return plate.part
+ 
+ 
+# ------------------------------------------------------------- assemble ---
+def build_bracket() -> Part:
+    leg = leg_solid()
+    plate = top_plate_solid()  
+ 
+    with BuildPart() as bracket:
+        insert(plate)
+        insert(leg.locate(Location((-PLATE_W / 2, -PLATE_D / 2, -LEG_H))))
+        insert(leg.locate(Location((PLATE_W / 2 - LEG_T, -PLATE_D / 2, -LEG_H))))
+ 
+        # Inner mating face on the left leg, at the horn's centre hole.
+        RigidJoint(
+            label="fixed",
+            joint_location=Location(
+                Plane(
+                    origin=(-PLATE_W / 2 + LEG_T, 0, -LEG_H + HOLE_ROW_Z),
+                    x_dir=(0, 0, 1),
+                    z_dir=(1, 0, 0),
+                )
+            ),
+        )
+ 
+    return bracket.part
+ 
+def main() -> None:
+    bracket = build_bracket()
+    export_common_part(bracket, "bracket_u_shape")
+    show(bracket, name="bracket_u_shape", clear=True)
+    
+if __name__ == "__main__":
+    main()

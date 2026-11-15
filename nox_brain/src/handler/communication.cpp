@@ -1,0 +1,111 @@
+/*******************************************************************************
+ * Copyright (c) 2021 Christian Stein
+ ******************************************************************************/
+
+#include "handler/communication.hpp"
+
+using std::placeholders::_1;
+
+namespace brain {
+
+CCommunication::CCommunication(std::shared_ptr<rclcpp::Node> node) : node_(node) {
+    m_subStatus = node_->create_subscription<nox_interfaces::msg::CommunicationStatus>(
+        "communication_status", 10, std::bind(&CCommunication::onCommunicationStatus, this, _1));
+
+    m_pubTalking = node_->create_publisher<std_msgs::msg::String>("request_talking", 10);
+    m_pubChat = node_->create_publisher<std_msgs::msg::String>("request_chat", 10);
+    m_pubListening = node_->create_publisher<std_msgs::msg::Bool>("request_listening", 10);
+    m_pubMusic = node_->create_publisher<std_msgs::msg::String>("request_music", 10);
+    pub_background_music_ = node_->create_publisher<std_msgs::msg::String>("request_background_music", 10);
+    pub_background_music_fade_ =
+        node_->create_publisher<std_msgs::msg::Float32>("request_background_music_fade", 10);
+}
+
+void CCommunication::onCommunicationStatus(const nox_interfaces::msg::CommunicationStatus& msg) {
+    auto status_string = std::to_string(msg.status);
+    // RCLCPP_INFO_STREAM(node_->get_logger(), "onCommunicationStatus |" << status_string.c_str() << "|");
+    m_communication.status = msg.status;
+    awaiting_status_ = false;
+    if (!requestFinished() && msg.status == nox_interfaces::msg::CommunicationStatus::OFF) {
+        setRequestFinished(true);
+    }
+}
+
+void CCommunication::run(std::shared_ptr<RequestListening> request) {
+    RCLCPP_INFO_STREAM(node_->get_logger(), "CCommunication::run Listening |" << request->active);
+    std_msgs::msg::Bool msg;
+    msg.data = request->active;
+    m_pubListening->publish(msg);
+    setRequestFinished(false);
+    request_time_ = std::chrono::steady_clock::now();
+    awaiting_status_ = true;
+}
+
+void CCommunication::run(std::shared_ptr<RequestTalking> request) {
+    RCLCPP_INFO_STREAM(node_->get_logger(), "CCommunication::run Talking |" << request->text.c_str());
+    std_msgs::msg::String msg;
+    msg.data = request->text;
+    m_pubTalking->publish(msg);
+    setRequestFinished(false);
+    request_time_ = std::chrono::steady_clock::now();
+    awaiting_status_ = true;
+}
+
+void CCommunication::run(std::shared_ptr<RequestChat> request) {
+    RCLCPP_INFO_STREAM(node_->get_logger(), "CCommunication::run Chat |" << request->text.c_str());
+    std_msgs::msg::String msg;
+    msg.data = request->text;
+    m_pubChat->publish(msg);
+    setRequestFinished(false);
+    request_time_ = std::chrono::steady_clock::now();
+    awaiting_status_ = true;
+}
+
+void CCommunication::run(std::shared_ptr<RequestMusic> request) {
+    RCLCPP_INFO_STREAM(node_->get_logger(), "CCommunication::run Music |" << request->song.c_str());
+    if (request->song == "STOP" && request->fade_out_s > 0.0f) {
+        std_msgs::msg::Float32 fade;
+        fade.data = request->fade_out_s;
+        pub_background_music_fade_->publish(fade);
+        background_music_ = true;
+        // Like playback, fading must not finish pending speech or block motion.
+        return;
+    }
+    std_msgs::msg::String msg;
+    msg.data = request->song;
+    background_music_ = request->background && request->song != "STOP";
+    // Background playback outlives this action and must not block the planner.
+    // Leave any speech/listening request in the same group pending.
+    if (background_music_) {
+        pub_background_music_->publish(msg);
+        return;
+    }
+    m_pubMusic->publish(msg);
+    setRequestFinished(false);
+    request_time_ = std::chrono::steady_clock::now();
+    awaiting_status_ = true;
+}
+
+void CCommunication::cancel() {
+    if (m_communication.status == nox_interfaces::msg::CommunicationStatus::STT_OFFLINE_ACTIVE) {
+        auto request = std::make_shared<RequestListening>();
+        request->active = false;
+        run(request);
+    }
+    if (!background_music_ &&
+        m_communication.status == nox_interfaces::msg::CommunicationStatus::PLAYING_MUSIC) {
+        auto request = std::make_shared<RequestMusic>();
+        request->song = "STOP";
+        run(request);
+    }
+}
+
+void CCommunication::update() {
+    if (!requestFinished() && awaiting_status_ &&
+        std::chrono::steady_clock::now() - request_time_ > kTimeout) {
+        RCLCPP_WARN(node_->get_logger(), "CCommunication: no status received within timeout, marking done");
+        setRequestFinished(true);
+    }
+}
+
+}  // namespace brain

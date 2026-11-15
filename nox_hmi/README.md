@@ -1,0 +1,77 @@
+# RumbleX HMI
+
+The shared `NodeHmi` owns ROS subscriptions, page content, IP discovery, refreshes,
+and supply-voltage publication. `OledRenderer` creates the same monochrome 128×64
+Pillow frame for both backends. `HardwareBackend` owns the SSD1306, INA228, GPIO
+relay, and host shutdown; `SimulatedBackend` presents frames in a Pygame window.
+
+Build and source the workspace, then launch the desktop OLED:
+
+```bash
+ros2 launch nox_hmi hmi_simulated_launch.py
+ros2 launch nox_hmi hmi_simulated_launch.py simulated_voltage:=11.8 simulated_current:=0.6
+```
+
+The window displays the OLED at 4× scale. A graphical desktop is required.
+Simulation uses Pillow, Pygame, and the Liberation Sans font, declared in
+`package.xml`; it requires no GPIO, I²C, or Adafruit libraries.
+
+Cycle SYSTEM → SERVOS → SENSORS with `joystick_request.button_select`, either
+from the physical controller or `ros2 launch nox_teleop teleop_simulated_launch.py`
+(Backspace is Select). Telemetry topics and the one-second refresh interval are
+identical to the hardware node, including `movement_name`, `servo_status`,
+`scan_1d`, and `bno055/grav`.
+
+SENSORS shows the magnitude of the BNO055 gravity vector (`geometry_msgs/Vector3`
+on `bno055/grav`) as `g`, approximately 9.81 m/s² regardless of robot tilt.
+The driver's `bno055/imu` acceleration has gravity removed and is near zero
+at rest, so it is not used for this reading.
+
+SYSTEM also shows a compact host CPU reading, for example `CPU: 23%`, updated
+every second. It measures busy time across all cores from Linux `/proc/stat`;
+100% means all cores are busy, and idle/I/O-wait time is excluded. This works
+on Raspberry Pi 5 and amd64 Ubuntu 26.04 without extra dependencies. The desktop
+preview shows the development computer's actual usage. `CPU: --%` means the
+initial interval is pending or a reading is unavailable.
+
+Synthetic voltage/current default to 12.0 V / 0.0 A. These are simulator defaults,
+not robot configuration. The node publishes `supply_voltage` every second;
+current is displayed as an absolute value. Parameters can also change while running:
+
+```bash
+ros2 param set /node_hmi simulated_voltage 11.5
+ros2 param set /node_hmi simulated_current 0.8
+```
+
+Relay requests update in-memory state. A true `request_system_shutdown` turns the
+simulated relay off and shows `!!SHUTDOWN!!` on SYSTEM; the window and development
+computer remain running. Closing the window or pressing Ctrl+C cleans up ROS and
+the GUI. Run only one HMI backend in the same ROS namespace to avoid competing
+`supply_voltage` publishers and duplicate node names.
+
+The existing hardware entry point remains:
+
+```bash
+ros2 launch nox_hmi hmi_launch.py
+```
+
+Hardware additionally needs Adafruit Blinka (`board`/`digitalio`),
+`adafruit-circuitpython-ssd1306`, and `adafruit-circuitpython-ina228`, enabled I²C,
+and GPIO access on the Raspberry Pi. Host shutdown calls `sudo shutdown -h now`
+and requires a `NOPASSWD` sudoers rule for the actual robot login user. The setup
+script grants `/usr/sbin/shutdown -h now` only; it does not grant reboot permission.
+See [shutdown and sudo permissions](../nox_doc/setup_raspberry_pi/setup_ubuntu_26.04.md#herunterfahren-neustart-und-sudo-rechte)
+to configure an existing installation. Hardware initialization keeps the relay
+off until OLED and power-monitor setup completes, then turns it on.
+
+Framebuffer writes use 32-byte data chunks, each with an SSD1306 data control
+byte. On Nox's Pi 5, full-frame and 128-byte page transfers failed with I²C
+error 121 and kernel messages reporting `SDA stuck at low`; short transfers
+successfully render the complete display. A responding address at `0x3c` alone
+does not confirm that framebuffer writes work. Snow-like pixels with this error
+are a transfer failure, not a missing font. The renderer separately requires
+`/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf`.
+
+Validate `nox_hmi` using the [package test commands](../BUILD.md#tests).
+
+GUI tests use SDL's dummy video driver and run without a desktop.

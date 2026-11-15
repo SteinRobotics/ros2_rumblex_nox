@@ -1,0 +1,47 @@
+#pragma once
+
+#include <memory>
+
+#include "gait/gait_interfaces.hpp"
+#include "gait/pose_model.hpp"
+
+namespace brain {
+
+using namespace mp_units;
+using namespace mp_units::si::unit_symbols;
+using mp_units::angular::unit_symbols::rad;
+
+// Finite yaw excursions return to the captured pose before handing off.
+class CYawSequenceGait : public ISequenceGait {
+   public:
+    CYawSequenceGait(std::shared_ptr<rclcpp::Node> node, std::shared_ptr<CPoseModel> kinematics,
+                     units::Angle head_amplitude, units::Angle torso_amplitude);
+
+    void start(units::Duration duration_s, uint8_t direction) override;
+    bool update() override;
+    bool updateTimed(units::Duration elapsed_s) override;
+    // Stop requests do not interrupt these finite excursions.
+    void requestStop() override {
+    }
+    void cancelStop() override {
+    }
+    EGaitState state() const override {
+        return state_;
+    }
+
+   private:
+    std::shared_ptr<rclcpp::Node> node_;
+    std::shared_ptr<CPoseModel> kinematics_;
+    units::Angle phase_limit_;
+    units::Angle head_amplitude_;
+    units::Angle torso_amplitude_;
+    double direction_sign_ = 1.0;
+    units::AngularVelocity phase_rate_ = 0.0 * rad / s;
+    units::Angle phase_ = 0.0 * rad;
+    CPose torso_origin_;
+    COrientation head_origin_;
+    std::map<ELegIndex, CPosition> toe_origins_;
+    EGaitState state_ = EGaitState::Stopped;
+};
+
+}  // namespace brain

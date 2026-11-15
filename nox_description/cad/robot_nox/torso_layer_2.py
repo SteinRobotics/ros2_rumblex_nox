@@ -1,0 +1,67 @@
+#!/usr/bin/env python3
+
+# Allow direct execution as well as package imports.
+if __package__ in (None, ""):
+    import sys
+    from pathlib import Path
+
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from robot_nox import EXPORT_DIR
+from build123d import *
+from utils.ocp_utils import show
+
+import robot_nox.torso_common as torso_common
+
+def build_surface() -> Sketch:
+    with BuildSketch() as sketch:
+        insert(torso_common.build_surface())
+
+        # These plates start at layer 2, so retain three individual tab slots.
+        with Locations(*torso_common.diagonal_slots_locations):
+            insert(torso_common.rectangle_slots.sketch, mode=Mode.SUBTRACT)
+
+        # Join each three-slot row while retaining its full outer span.
+        with Locations(*torso_common.rectangle_slots_locations):
+            Rectangle(
+                torso_common.rectangle_slots_completed_width + torso_common.rectangle_slots_width,
+                torso_common.rectangle_slots_height,
+                mode=Mode.SUBTRACT,
+            )
+
+        for points in torso_common.SERVO_FRONT_CUTOUTS.values():
+            Polygon(*points, align=None, mode=Mode.SUBTRACT)
+
+        for x, y, radius in torso_common.LIST_SERVO_BRACKET_HOLES:
+            with Locations((x, y)):
+                Circle(radius, mode=Mode.SUBTRACT)
+
+    return sketch.sketch
+
+
+def build_model(surface: Sketch) -> Part:
+    with BuildPart() as model:
+        insert(surface)
+        extrude(amount=torso_common.THICKNESS)
+
+    return model.part
+
+
+def main() -> None:
+    surface = build_surface()
+    result = build_model(surface)
+
+    EXPORT_DIR.mkdir(parents=True, exist_ok=True)
+    (EXPORT_DIR / "step").mkdir(parents=True, exist_ok=True)
+    (EXPORT_DIR / "dxf").mkdir(parents=True, exist_ok=True)
+    export_step(result, str(EXPORT_DIR / "step/torso_layer_2.step"))
+
+    dxf_export = ExportDXF()
+    dxf_export.add_shape(surface)
+    dxf_export.write(str(EXPORT_DIR / "dxf/torso_layer_2.dxf"))
+
+    show(result, name="torso_layer_2", clear=True)
+
+        
+if __name__ == "__main__":
+    main()

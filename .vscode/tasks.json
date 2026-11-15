@@ -1,0 +1,49 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "colcon: build (workspace)",
+            "type": "process",
+            "command": "bash",
+            "args": [
+                "${workspaceFolder}/scripts/build.sh"
+            ],
+            "group": "build",
+            "problemMatcher": []
+        },
+        {
+            "label": "colcon: build (package and dependencies)",
+            "type": "process",
+            "command": "bash",
+            "args": [
+                "${workspaceFolder}/scripts/build.sh",
+                "${input:packageName}"
+            ],
+            "group": "build",
+            "problemMatcher": []
+        }
+    ],
+    "inputs": [
+        {
+            "id": "packageName",
+            "type": "pickString",
+            "description": "Select the package to build with its dependencies",
+            "options": [
+                "nox_brain",
+                "nox_bringup",
+                "nox_communication",
+                "nox_description",
+                "nox_gazebo",
+                "nox_hmi",
+                "nox_interfaces",
+                "nox_lidar_1d",
+                "nox_movement",
+                "nox_navigation",
+                "nox_perception_lidar",
+                "nox_teleop",
+                "nox_utils"
+            ],
+            "default": "nox_movement"
+        }
+    ]
+}

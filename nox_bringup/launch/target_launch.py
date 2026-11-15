@@ -1,0 +1,122 @@
+import launch
+from launch import LaunchDescription
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.conditions import IfCondition
+from launch.launch_description_sources import (
+    AnyLaunchDescriptionSource,
+    PythonLaunchDescriptionSource,
+)
+from launch.substitutions import (
+    Command,
+    FindExecutable,
+    LaunchConfiguration,
+    PathJoinSubstitution,
+)
+from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
+from launch_ros.substitutions import FindPackageShare
+
+
+def generate_launch_description():
+    robot = "nox"
+    model = PathJoinSubstitution(
+        [FindPackageShare("nox_description"), "urdf", [robot, "_mesh.urdf.xacro"]]
+    )
+    robot_state = Node(
+        package="robot_state_publisher",
+        executable="robot_state_publisher",
+        output="screen",
+        parameters=[
+            {
+                "robot_description": ParameterValue(
+                    Command(
+                        [FindExecutable(name="xacro"), " ", model, " use_sim:=false"]
+                    ),
+                    value_type=str,
+                )
+            }
+        ],
+    )
+    communication = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            [FindPackageShare("nox_communication"), "/launch/communication_launch.py"]
+        ),
+        launch_arguments={}.items(),
+    )
+    hmi = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            [FindPackageShare("nox_hmi"), "/launch/hmi_launch.py"]
+        )
+    )
+    movement = IncludeLaunchDescription(
+        AnyLaunchDescriptionSource(
+            [FindPackageShare("nox_movement"), "/launch/movement_launch.py"]
+        ),
+        launch_arguments={}.items(),
+    )
+    teleop = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            [FindPackageShare("nox_teleop"), "/launch/teleop_launch.py"]
+        )
+    )
+    lidar = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            [FindPackageShare("nox_bringup"), "/launch/sensors_launch.py"]
+        ),
+        launch_arguments={
+            "enable_head_scan": LaunchConfiguration("enable_navigation")
+        }.items(),
+    )
+    bno055_config = PathJoinSubstitution(
+        [FindPackageShare("nox_bringup"), "config", robot, "bno055_params.yaml"]
+    )
+    bno055 = Node(
+        package="bno055",
+        executable="bno055",
+        name="bno055",
+        output="screen",
+        parameters=[bno055_config],
+    )
+    brain = launch.actions.TimerAction(
+        period=5.0,
+        actions=[
+            IncludeLaunchDescription(
+                PythonLaunchDescriptionSource(
+                    [FindPackageShare("nox_brain"), "/launch/brain_launch.py"]
+                ),
+                launch_arguments={
+                    "autostart_listening": LaunchConfiguration("autostart_listening")
+                }.items(),
+            )
+        ],
+    )
+    navigation = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            [FindPackageShare("nox_navigation"), "/launch/navigation_launch.py"]
+        ),
+        launch_arguments={}.items(),
+        condition=IfCondition(LaunchConfiguration("enable_navigation")),
+    )
+    return LaunchDescription(
+        [
+            DeclareLaunchArgument(
+                "autostart_listening",
+                default_value="false",
+                description="Activate speech-to-text listening when the brain starts",
+            ),
+            DeclareLaunchArgument(
+                "enable_navigation",
+                default_value="false",
+                description="Launch nox_navigation (robot-specific sensing + reactive nav)",
+            ),
+            robot_state,
+            communication,
+            hmi,
+            movement,
+            teleop,
+            lidar,
+            bno055,
+            brain,
+            navigation,
+        ]
+    )

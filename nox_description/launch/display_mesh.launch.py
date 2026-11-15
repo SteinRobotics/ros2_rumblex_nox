@@ -1,0 +1,72 @@
+"""Display a RumbleX mesh model in RViz."""
+
+import os
+import re
+from ament_index_python.packages import get_package_share_directory
+from launch import LaunchDescription
+from launch.actions import DeclareLaunchArgument, OpaqueFunction
+from launch.conditions import IfCondition
+from launch.substitutions import LaunchConfiguration
+from launch_ros.actions import Node
+import xacro
+
+
+def _launch_robot(context):
+    robot = "nox"
+    share = get_package_share_directory("nox_description")
+    xacro_file = os.path.join(share, "urdf", f"{robot}_mesh.urdf.xacro")
+    if not os.path.isfile(xacro_file):
+        raise RuntimeError(f"Robot profile {robot!r} has no mesh model: {xacro_file}")
+    description = xacro.process_file(xacro_file, mappings={"use_sim": "false"}).toxml()
+    return [
+        Node(
+            package="robot_state_publisher",
+            executable="robot_state_publisher",
+            parameters=[{"robot_description": description}],
+            remappings=[("joint_states", LaunchConfiguration("joint_states_topic"))],
+        ),
+        Node(
+            package="joint_state_publisher_gui",
+            executable="joint_state_publisher_gui",
+            remappings=[("joint_states", LaunchConfiguration("joint_states_topic"))],
+            condition=IfCondition(LaunchConfiguration("joint_state_publisher_gui")),
+        ),
+        Node(
+            package="rviz2",
+            executable="rviz2",
+            arguments=[
+                "-d",
+                os.path.join(share, "rviz", "model.rviz"),
+                "-f",
+                LaunchConfiguration("fixed_frame"),
+            ],
+            additional_env={
+                "QT_QPA_PLATFORM": "xcb",
+                "QT_ENABLE_HIGHDPI_SCALING": "0",
+                "QT_AUTO_SCREEN_SCALE_FACTOR": "0",
+                "QT_SCALE_FACTOR": "1",
+                "QT_SCREEN_SCALE_FACTORS": "1",
+            },
+        ),
+    ]
+
+
+def generate_launch_description():
+    return LaunchDescription(
+        [
+            DeclareLaunchArgument(
+                "joint_states_topic",
+                default_value="joint_states",
+                description="Joint states used to display the robot",
+            ),
+            DeclareLaunchArgument(
+                "fixed_frame", default_value="base_link", description="RViz fixed frame"
+            ),
+            DeclareLaunchArgument(
+                "joint_state_publisher_gui",
+                default_value="true",
+                description="Show sliders for manually setting joint angles",
+            ),
+            OpaqueFunction(function=_launch_robot),
+        ]
+    )

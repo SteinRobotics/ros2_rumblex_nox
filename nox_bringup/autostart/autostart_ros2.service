@@ -1,0 +1,21 @@
+# Installed by scripts/setup_raspberry_pi.sh as a user service.
+# Inspect with: journalctl --user -u autostart_ros2.service -b
+[Unit]
+Description=Nox ROS 2 robot bringup
+Requires=pipewire.service pipewire-pulse.service wireplumber.service
+After=pipewire.service pipewire-pulse.service wireplumber.service
+
+[Service]
+Type=simple
+WorkingDirectory=%h/Workspace/colcon_nox
+EnvironmentFile=-%h/.config/nox/speech.env
+Environment=PYTHONUNBUFFERED=1
+ExecStart=%h/.local/bin/nox-start
+Restart=on-failure
+RestartSec=10
+KillSignal=SIGINT
+KillMode=control-group
+TimeoutStopSec=30
+
+[Install]
+WantedBy=default.target

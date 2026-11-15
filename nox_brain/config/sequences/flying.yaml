@@ -1,0 +1,81 @@
+# Use the middle legs as wings, then sway the torso before restoring the starting pose.
+name: flying
+# The four outer legs retain their toe targets throughout the gesture.
+variables:
+  kTransitionDuration: &kTransitionDuration 1.5  # s
+  kWingBeatDuration: &kWingBeatDuration 1.0  # s
+  kWingBeatCount: &kWingBeatCount 3  # repetitions
+  kSwayCount: &kSwayCount 2  # repetitions
+  kWingRaised: &kWingRaised 25  # deg
+  kWingLowered: &kWingLowered -10  # deg
+  kWingKneeUp: &kWingKneeUp 110  # deg
+  kWingKneeDown: &kWingKneeDown 80  # deg
+  kRollRight: &kRollRight -6  # deg
+  kRollLeft: &kRollLeft 6  # deg
+actions:
+  - movement:
+      name: SINGLE_POSE
+      duration_s: *kTransitionDuration
+      interpolation: sin_squared
+      save_pose: true  # Capture the pose before this movement begins.
+      joint_targets:
+        right_mid: {torso_coxa: 0, coxa_femur: *kWingRaised, femur_tibia: *kWingKneeUp}
+        left_mid: {torso_coxa: 0, coxa_femur: *kWingRaised, femur_tibia: *kWingKneeUp}
+      body_pose:
+        head_orientation: {yaw: 0, pitch: 0}
+        torso_pose: {orientation: {pitch: -5}}
+  # Repeat synchronized down/up wing beats using the configured count.
+  - loop:
+      times: *kWingBeatCount
+      actions:
+        - movement:
+            name: SINGLE_POSE
+            duration_s: *kWingBeatDuration
+            interpolation: sin_squared
+            joint_targets:
+              right_mid: {torso_coxa: 0, coxa_femur: *kWingLowered, femur_tibia: *kWingKneeDown}
+              left_mid: {torso_coxa: 0, coxa_femur: *kWingLowered, femur_tibia: *kWingKneeDown}
+        - movement:
+            name: SINGLE_POSE
+            duration_s: *kWingBeatDuration
+            interpolation: sin_squared
+            joint_targets:
+              right_mid: {torso_coxa: 0, coxa_femur: *kWingRaised, femur_tibia: *kWingKneeUp}
+              left_mid: {torso_coxa: 0, coxa_femur: *kWingRaised, femur_tibia: *kWingKneeUp}
+  # Zero femur elevation and a 90-degree knee extend each wing horizontally.
+  - movement:
+      name: SINGLE_POSE
+      duration_s: *kWingBeatDuration
+      interpolation: sin_squared
+      joint_targets:
+        right_mid: {torso_coxa: 0, coxa_femur: 0, femur_tibia: *kWingKneeUp}
+        left_mid: {torso_coxa: 0, coxa_femur: 0, femur_tibia: *kWingKneeUp}
+  # Move the extended wings with the torso; keep the four support toes fixed.
+  - loop:
+      times: *kSwayCount
+      actions:
+        - movement:
+            name: SINGLE_POSE
+            duration_s: *kTransitionDuration
+            interpolation: sin_squared
+            joint_targets:
+              right_mid: {torso_coxa: 0, coxa_femur: 0, femur_tibia: *kWingKneeUp}
+              left_mid: {torso_coxa: 0, coxa_femur: 0, femur_tibia: *kWingKneeUp}
+            body_pose:
+              head_orientation: {yaw: 0, pitch: 0}
+              torso_pose: {orientation: {roll: *kRollRight, pitch: 5}}
+        - movement:
+            name: SINGLE_POSE
+            duration_s: *kTransitionDuration
+            interpolation: sin_squared
+            joint_targets:
+              right_mid: {torso_coxa: 0, coxa_femur: 0, femur_tibia: *kWingKneeUp}
+              left_mid: {torso_coxa: 0, coxa_femur: 0, femur_tibia: *kWingKneeUp}
+            body_pose:
+              head_orientation: {yaw: 0, pitch: 0}
+              torso_pose: {orientation: {roll: *kRollLeft, pitch: 5}}
+  - movement:
+      name: SINGLE_POSE
+      duration_s: *kTransitionDuration
+      interpolation: sin_squared
+      restore_pose: true  # Return to the captured pose on normal completion.

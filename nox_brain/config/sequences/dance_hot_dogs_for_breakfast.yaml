@@ -1,0 +1,10 @@
+# Voice/joystick entry point for the shared Hot Dogs for Breakfast choreography.
+# Regenerate the shared snippet with tools/examples/dance_hot_dogs_for_breakfast.py.
+# Pre-music preparation, then 16 x 1.752 s phrases with dynamic quarter-phrase accents.
+# The same choreography is used by dance_standard; triggers stay on this wrapper.
+name: dance_hot_dogs_for_breakfast
+trigger:
+  joystick: button_r2
+  voice: commandDanceHotDogsForBreakfast
+actions:
+  - include: snippets/dance_hot_dogs_for_breakfast.yaml

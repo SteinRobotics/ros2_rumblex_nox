@@ -1,0 +1,88 @@
+# Movement units
+
+See [the body-pose pipeline](../nox_brain/MOVEMENT.md) for the brain/movement interface and configuration migration.
+
+Kinematics uses [mp-units](https://mpusz.github.io/mp-units/2.5/) for link lengths,
+squared lengths, and angles. `nox_utils/units.hpp` exposes `m`, `mm`, `deg`, and `rad` plus
+the `Length`, `Area`, and `Angle` quantity types. For example, `units::Length length =
+50.0 * units::mm` represents the same length as `0.050 * units::m`.
+Extract numbers explicitly with `.numerical_value_in(unit)` at existing interfaces.
+
+`CPosition` coordinates and `CTorsoCenterOffset` coordinates are `Length`
+quantities. `COrientation` members (`roll`, `pitch`, `yaw`), `CLegAngles`
+members (`torso_coxa`, `coxa_femur`, `femur_tibia`), and the torso offset `psi` are `Angle`
+quantities. Torso poses and center offsets exclude the head, whose orientation
+is stored separately. `CLeg` stores its toe position in `toe_position`.
+
+Standing and laydown toe positions use the ROS parameter roots
+`toe_positions_standing` and `toe_positions_laydown`, with per-leg `x`, `y`, and
+`z` coordinates in metres. Leg keys use lowercase names such as `right_front`.
+Torso coordinates use +X forward, +Y left, and +Z up. Right legs have negative Y;
+positive yaw is anticlockwise when viewed from above. ROS `cmd_vel` follows these
+axes, so rightward translation and clockwise rotation use negative `linear.y` and
+`angular.z`, respectively.
+
+Nox's hardware direction mapping is in `config/nox/servo_description.yaml`.
+The migration from +Y right to +Y left reverses head yaw and all six coxa
+angles. Their servo direction flags and nonzero adaptation trims must both
+reverse so the calibrated physical zero positions stay unchanged. Head pitch,
+femur, and tibia mappings retain their existing directions. These settings also
+convert startup servo readings back into model angles; RViz and Gazebo do not
+exercise the hardware tick conversion.
+
+Gait parameters use `gait.<name>.<field>`; servo parameters use `servo.<field>`.
+See [naming conventions and parameter migration](NAMING.md) for the complete
+rename list. Custom configurations must migrate to the new keys.
+
+`CLeg` stores its joint angles in `angles`. Arithmetic and
+interpolation preserve units, and assignments reject bare numbers or quantities
+of the wrong dimension.
+
+The geometry types are defined in `nox_utils/body_types.hpp` under
+`nox_geometry`. Movement uses `nox_geometry::CBodyModel` directly from
+`nox_utils/body_model.hpp`. For example:
+
+```cpp
+#include "nox_utils/body_types.hpp"
+
+namespace units = nox_geometry::units;
+using nox_geometry::CPosition;
+using nox_geometry::CLegAngles;
+
+CPosition toe;
+toe.x = 50.0 * units::mm;
+CLegAngles joints;
+joints.torso_coxa = 1.0 * units::rad;
+auto degrees = joints.torso_coxa.numerical_value_in(units::deg);
+```
+
+Quantity constructors support mixed compatible units. The existing double
+constructors interpret lengths as metres and angles as degrees for configuration
+and message adapters. Head commands and position tolerances take quantities.
+Gait displacements, stored head angles, and length/angle parameters also retain
+their units. Units are attached when loading parameters, so gait updates need no
+repeated conversions. Kinematics uses typed trigonometry and `mp_units::hypot`;
+length ratios remain dimensionless quantities through clamping and inverse trig.
+
+Robot YAML parameters and position/pose interfaces continue to use metres;
+movement orientations and servo targets use degrees. The ROS `joint_states`
+publisher converts angles to radians. The angular system gives angles their own
+dimension, preventing accidental use as lengths or plain scalars.
+
+Building requires C++23 and CMake 3.25 or newer. CMake uses an installed mp-units
+2.5 package when available, otherwise downloads version 2.5.0 with a SHA256 check.
+The fallback disables optional contract checks to avoid a GSL dependency; it uses
+the compiler's standard formatting support or requires fmt if unavailable.
+mp-units is managed by CMake, so no additional rosdep key is needed.
+
+For an offline mp-units checkout, use the
+[offline build instructions](../BUILD.md#offline-mp-units-build). Movement build
+and test commands are centralized in [BUILD.md](../BUILD.md).
+
+Velocity commands use m/s and rad/s. Movement consumes poses at 50 Hz and sends
+servo durations matching pose delivery intervals. Servo targets are rounded to
+the nearest 0.24-degree tick; small tick changes are sent without a separate
+half-degree deadband. `body_pose_actual` and
+`joint_states` describe applied kinematic targets initialized from servo angles,
+not continuous measured joint feedback. See the pipeline document for command
+limits, gait selection, and supporting-foot velocity estimation.

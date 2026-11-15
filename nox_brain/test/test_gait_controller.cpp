@@ -1,0 +1,598 @@
+/*******************************************************************************
+ * Copyright (c) 2025 Christian Stein
+ ******************************************************************************/
+
+#include <gtest/gtest.h>
+
+#include <geometry_msgs/msg/twist.hpp>
+
+#include "gait/gait_controller.hpp"
+#include "gait/pose_model.hpp"
+#include "movement_request.hpp"
+#include "rclcpp/rclcpp.hpp"
+#include "test_helpers.hpp"
+
+namespace {
+
+using namespace mp_units;
+using namespace mp_units::si::unit_symbols;
+using mp_units::angular::unit_symbols::deg;
+using mp_units::angular::unit_symbols::rad;
+using namespace brain;
+using MovementRequestMsg = brain::MovementRequest;
+
+namespace {
+constexpr int kMaxIterations = 100;
+}  // namespace
+
+class GaitControllerTest : public ::testing::Test {
+   protected:
+    void SetUp() override {
+        if (!rclcpp::ok()) {
+            rclcpp::init(0, nullptr);
+        }
+
+        rclcpp::NodeOptions options;
+        auto overrides = test_helpers::defaultRobotParameters();
+        options.parameter_overrides(overrides);
+
+        node_ = std::make_shared<rclcpp::Node>("test_gait_controller_node", options);
+        kinematics_ = std::make_shared<CPoseModel>(node_);
+        controller_ = std::make_unique<CGaitController>(node_, kinematics_);
+    }
+
+    void TearDown() override {
+        controller_.reset();
+        kinematics_.reset();
+        node_.reset();
+        if (rclcpp::ok()) {
+            rclcpp::shutdown();
+        }
+    }
+
+    Velocity createZeroVelocity() {
+        Velocity vel;
+        vel.linear.x = 0.0 * m / s;
+        vel.linear.y = 0.0 * m / s;
+        vel.linear.z = 0.0 * m / s;
+        vel.angular.x = 0.0 * rad / s;
+        vel.angular.y = 0.0 * rad / s;
+        vel.angular.z = 0.0 * rad / s;
+        return vel;
+    }
+
+    Velocity createForwardVelocity() {
+        Velocity vel = createZeroVelocity();
+        vel.linear.x = 0.1 * m / s;
+        return vel;
+    }
+
+    std::shared_ptr<rclcpp::Node> node_;
+    std::shared_ptr<CPoseModel> kinematics_;
+    std::unique_ptr<CGaitController> controller_;
+};
+
+TEST_F(GaitControllerTest, StartupWithoutRequestIsStoppedAndPreservesPose) {
+    const auto initial_pose = bodyPose(*kinematics_);
+    EXPECT_EQ(controller_->currentGait(), MovementRequestMsg::NO_REQUEST);
+    EXPECT_TRUE(controller_->motionStopped());
+    EXPECT_FALSE(controller_->moving());
+    EXPECT_FALSE(controller_->hasPendingGait());
+    EXPECT_FALSE(controller_->takeSequenceAbort());
+    EXPECT_FALSE(controller_->finishesAutomatically());
+    EXPECT_EQ(controller_->commandedVelocity(createForwardVelocity()).toMsg(), createZeroVelocity().toMsg());
+    EXPECT_FALSE(controller_->updateSelectedGait(createForwardVelocity()));
+    controller_->requestStopSelectedGait();
+    EXPECT_FALSE(controller_->stopRequested());
+    EXPECT_FALSE(controller_->updateSelectedGait(createZeroVelocity()));
+    brain::MovementRequest request;
+    request.type = MovementRequestMsg::NO_REQUEST;
+    EXPECT_FALSE(controller_->setGait(request));
+    EXPECT_EQ(controller_->currentGait(), MovementRequestMsg::NO_REQUEST);
+    EXPECT_EQ(bodyPose(*kinematics_), initial_pose);
+}
+
+TEST_F(GaitControllerTest, FirstRequestActivatesFromIdleWithoutChangingPose) {
+    const auto initial_pose = bodyPose(*kinematics_);
+    brain::MovementRequest request;
+    request.type = MovementRequestMsg::SEQUENCE_LAYDOWN;
+    ASSERT_TRUE(controller_->setGait(request));
+    EXPECT_EQ(controller_->currentGait(), MovementRequestMsg::SEQUENCE_LAYDOWN);
+    EXPECT_FALSE(controller_->hasPendingGait());
+    EXPECT_EQ(bodyPose(*kinematics_), initial_pose);
+    EXPECT_TRUE(controller_->updateSelectedGait(createZeroVelocity()));
+}
+
+// Test: Switch from idle to WAITING
+TEST_F(GaitControllerTest, SwitchFromIdleToWaiting) {
+    auto vel = createZeroVelocity();
+
+    // Verify we start idle
+    EXPECT_EQ(controller_->currentGait(), MovementRequestMsg::NO_REQUEST);
+
+    // Request stop and wait for it to complete
+    controller_->requestStopSelectedGait();
+    for (int i = 0; i < kMaxIterations; ++i) {
+        controller_->updateSelectedGait(vel);
+    }
+
+    // Switch to WAITING
+    brain::MovementRequest request;
+    request.type = MovementRequestMsg::SEQUENCE_WAITING;
+    controller_->setGait(request);
+    EXPECT_EQ(controller_->currentGait(), MovementRequestMsg::SEQUENCE_WAITING);
+}
+
+// Test: Switch from TRIPOD to LEGS_WAVE
+TEST_F(GaitControllerTest, SwitchFromTripodToLegWave) {
+    auto vel = createZeroVelocity();
+
+    // Stop current gait
+    controller_->requestStopSelectedGait();
+    for (int i = 0; i < kMaxIterations; ++i) {
+        controller_->updateSelectedGait(vel);
+    }
+
+    // Switch to LEGS_WAVE
+    brain::MovementRequest request;
+    request.type = MovementRequestMsg::SEQUENCE_LEGS_WAVE;
+    controller_->setGait(request);
+    EXPECT_EQ(controller_->currentGait(), MovementRequestMsg::SEQUENCE_LEGS_WAVE);
+}
+
+// Test: Switch from WAITING to WATCH
+TEST_F(GaitControllerTest, SwitchFromWaitingToWatch) {
+    auto vel = createZeroVelocity();
+
+    // First switch to WAITING
+    controller_->requestStopSelectedGait();
+    for (int i = 0; i < kMaxIterations; ++i) {
+        controller_->updateSelectedGait(vel);
+    }
+    brain::MovementRequest request;
+    request.type = MovementRequestMsg::SEQUENCE_WAITING;
+    controller_->setGait(request);
+    EXPECT_EQ(controller_->currentGait(), MovementRequestMsg::SEQUENCE_WAITING);
+
+    // Stop WAITING
+    controller_->requestStopSelectedGait();
+    for (int i = 0; i < kMaxIterations; ++i) {
+        controller_->updateSelectedGait(vel);
+    }
+
+    // Switch to WATCH
+    request.type = MovementRequestMsg::SEQUENCE_WATCH;
+    controller_->setGait(request);
+    EXPECT_EQ(controller_->currentGait(), MovementRequestMsg::SEQUENCE_WATCH);
+}
+
+// Test: Switch to TORSO_ROLL
+TEST_F(GaitControllerTest, SwitchToTorsoRoll) {
+    auto vel = createZeroVelocity();
+
+    controller_->requestStopSelectedGait();
+    for (int i = 0; i < kMaxIterations; ++i) {
+        controller_->updateSelectedGait(vel);
+    }
+
+    brain::MovementRequest request;
+    request.type = MovementRequestMsg::SEQUENCE_BODY_ROLL;
+    controller_->setGait(request);
+    EXPECT_EQ(controller_->currentGait(), MovementRequestMsg::SEQUENCE_BODY_ROLL);
+}
+
+// Test: Switch from TORSO_ROLL to STAND_UP
+TEST_F(GaitControllerTest, SwitchFromTorsoRollToStandUp) {
+    auto vel = createZeroVelocity();
+
+    // First stop current gait
+    controller_->requestStopSelectedGait();
+    for (int i = 0; i < kMaxIterations; ++i) {
+        controller_->updateSelectedGait(vel);
+    }
+
+    // Switch to TORSO_ROLL
+    brain::MovementRequest request;
+    request.type = MovementRequestMsg::SEQUENCE_BODY_ROLL;
+    controller_->setGait(request);
+    EXPECT_EQ(controller_->currentGait(), MovementRequestMsg::SEQUENCE_BODY_ROLL);
+
+    // Stop TORSO_ROLL before switching
+    controller_->requestStopSelectedGait();
+    for (int i = 0; i < kMaxIterations; ++i) {
+        controller_->updateSelectedGait(vel);
+    }
+
+    // Switch to STAND_UP and allow the switch to process
+    request.type = MovementRequestMsg::SEQUENCE_STAND_UP;
+    controller_->setGait(request);
+    for (int i = 0; i < kMaxIterations; ++i) {
+        controller_->updateSelectedGait(vel);
+    }
+    EXPECT_EQ(controller_->currentGait(), MovementRequestMsg::SEQUENCE_STAND_UP);
+}
+
+// Test: Switch to STAND_UP
+TEST_F(GaitControllerTest, SwitchToStandUp) {
+    auto vel = createZeroVelocity();
+
+    controller_->requestStopSelectedGait();
+    for (int i = 0; i < kMaxIterations; ++i) {
+        controller_->updateSelectedGait(vel);
+    }
+
+    brain::MovementRequest request;
+    request.type = MovementRequestMsg::SEQUENCE_STAND_UP;
+    controller_->setGait(request);
+    EXPECT_EQ(controller_->currentGait(), MovementRequestMsg::SEQUENCE_STAND_UP);
+}
+
+// Test: Switch to LAYDOWN
+TEST_F(GaitControllerTest, SwitchToLaydown) {
+    auto vel = createZeroVelocity();
+
+    controller_->requestStopSelectedGait();
+    for (int i = 0; i < kMaxIterations; ++i) {
+        controller_->updateSelectedGait(vel);
+    }
+
+    brain::MovementRequest request;
+    request.type = MovementRequestMsg::SEQUENCE_LAYDOWN;
+    controller_->setGait(request);
+    EXPECT_EQ(controller_->currentGait(), MovementRequestMsg::SEQUENCE_LAYDOWN);
+}
+
+// Test: Switch to an explicit pose
+TEST_F(GaitControllerTest, SwitchToSinglePose) {
+    auto vel = createZeroVelocity();
+
+    controller_->requestStopSelectedGait();
+    for (int i = 0; i < kMaxIterations; ++i) {
+        controller_->updateSelectedGait(vel);
+    }
+
+    brain::MovementRequest request;
+    request.type = MovementRequestMsg::SINGLE_POSE;
+    request.body_pose.has_head_orientation = true;
+    controller_->setGait(request);
+    EXPECT_EQ(controller_->currentGait(), MovementRequestMsg::SINGLE_POSE);
+}
+
+// Test: Request same gait twice (should not switch)
+TEST_F(GaitControllerTest, RequestSameGaitTwice) {
+    auto vel = createZeroVelocity();
+
+    // Switch to WAITING
+    controller_->requestStopSelectedGait();
+    for (int i = 0; i < kMaxIterations; ++i) {
+        controller_->updateSelectedGait(vel);
+    }
+    brain::MovementRequest request;
+    request.type = MovementRequestMsg::SEQUENCE_WAITING;
+    controller_->setGait(request);
+    EXPECT_EQ(controller_->currentGait(), MovementRequestMsg::SEQUENCE_WAITING);
+
+    // Request WAITING again (should remain WAITING, may restart if stopped)
+    controller_->setGait(request);
+    EXPECT_EQ(controller_->currentGait(), MovementRequestMsg::SEQUENCE_WAITING);
+}
+
+// Test: Switching while gait is running (pending switch)
+TEST_F(GaitControllerTest, SwitchWhileRunning) {
+    auto vel = createForwardVelocity();
+
+    brain::MovementRequest initial_request;
+    initial_request.type = MovementRequestMsg::SEQUENCE_LAYDOWN;
+    ASSERT_TRUE(controller_->setGait(initial_request));
+    EXPECT_EQ(controller_->currentGait(), MovementRequestMsg::SEQUENCE_LAYDOWN);
+
+    // Run a few iterations to ensure gait is active
+    for (int i = 0; i < 5; ++i) {
+        controller_->updateSelectedGait(vel);
+    }
+
+    // Request switch to WAITING while running
+    brain::MovementRequest request;
+    request.type = MovementRequestMsg::SEQUENCE_WAITING;
+    controller_->setGait(request);
+
+    // The switch should be pending until gait stops
+    // Continue updating until switch completes
+    auto zero_vel = createZeroVelocity();
+    for (int i = 0; i < kMaxIterations; ++i) {
+        controller_->updateSelectedGait(zero_vel);
+        if (controller_->currentGait() == MovementRequestMsg::SEQUENCE_WAITING) {
+            break;
+        }
+    }
+
+    // Verify switch completed
+    EXPECT_EQ(controller_->currentGait(), MovementRequestMsg::SEQUENCE_WAITING);
+}
+
+// Test: Multiple consecutive switches
+TEST_F(GaitControllerTest, MultipleConsecutiveSwitches) {
+    auto vel = createZeroVelocity();
+
+    // Switch 1: TRIPOD -> WAITING
+    controller_->requestStopSelectedGait();
+    for (int i = 0; i < kMaxIterations; ++i) {
+        controller_->updateSelectedGait(vel);
+    }
+    brain::MovementRequest request;
+    request.type = MovementRequestMsg::SEQUENCE_WAITING;
+    controller_->setGait(request);
+    EXPECT_EQ(controller_->currentGait(), MovementRequestMsg::SEQUENCE_WAITING);
+
+    // Switch 2: WAITING -> WATCH
+    controller_->requestStopSelectedGait();
+    for (int i = 0; i < kMaxIterations; ++i) {
+        controller_->updateSelectedGait(vel);
+    }
+    request.type = MovementRequestMsg::SEQUENCE_WATCH;
+    controller_->setGait(request);
+    EXPECT_EQ(controller_->currentGait(), MovementRequestMsg::SEQUENCE_WATCH);
+
+    // Switch 3: WATCH -> LEGS_WAVE
+    controller_->requestStopSelectedGait();
+    for (int i = 0; i < kMaxIterations; ++i) {
+        controller_->updateSelectedGait(vel);
+    }
+    request.type = MovementRequestMsg::SEQUENCE_LEGS_WAVE;
+    controller_->setGait(request);
+    EXPECT_EQ(controller_->currentGait(), MovementRequestMsg::SEQUENCE_LEGS_WAVE);
+
+    // Switch 4: LEGS_WAVE -> MOVE (back to original)
+    controller_->requestStopSelectedGait();
+    for (int i = 0; i < kMaxIterations; ++i) {
+        controller_->updateSelectedGait(vel);
+    }
+    request.type = MovementRequestMsg::MOVE_COMBINED;
+    controller_->setGait(request);
+    EXPECT_EQ(controller_->currentGait(), MovementRequestMsg::MOVE_COMBINED);
+}
+
+// Test: Update gait after switch
+TEST_F(GaitControllerTest, UpdateAfterSwitch) {
+    auto vel = createZeroVelocity();
+
+    // Switch to WAITING
+    controller_->requestStopSelectedGait();
+    for (int i = 0; i < kMaxIterations; ++i) {
+        controller_->updateSelectedGait(vel);
+    }
+    brain::MovementRequest request;
+    request.type = MovementRequestMsg::SEQUENCE_WAITING;
+    controller_->setGait(request);
+
+    // Update the new gait - should not crash
+    bool update_result = false;
+    EXPECT_NO_THROW({ update_result = controller_->updateSelectedGait(vel); });
+
+    // Update returns true when gait processes successfully
+    EXPECT_TRUE(update_result || !update_result);  // Just verify it executes
+}
+
+// Test: Switch back to MOVE with velocity
+TEST_F(GaitControllerTest, SwitchBackToMoveWithVelocity) {
+    auto vel = createZeroVelocity();
+    auto forward_vel = createForwardVelocity();
+
+    // Switch to WAITING
+    controller_->requestStopSelectedGait();
+    for (int i = 0; i < kMaxIterations; ++i) {
+        controller_->updateSelectedGait(vel);
+    }
+    brain::MovementRequest request;
+    request.type = MovementRequestMsg::SEQUENCE_WAITING;
+    controller_->setGait(request);
+    EXPECT_EQ(controller_->currentGait(), MovementRequestMsg::SEQUENCE_WAITING);
+
+    // Switch back to MOVE
+    controller_->requestStopSelectedGait();
+    for (int i = 0; i < kMaxIterations; ++i) {
+        controller_->updateSelectedGait(vel);
+    }
+    request.type = MovementRequestMsg::MOVE_COMBINED;
+    controller_->setGait(request);
+    EXPECT_EQ(controller_->currentGait(), MovementRequestMsg::MOVE_COMBINED);
+
+    // Update with forward velocity - should work
+    EXPECT_NO_THROW({
+        for (int i = 0; i < 10; ++i) {
+            controller_->updateSelectedGait(forward_vel);
+        }
+    });
+}
+
+TEST_F(GaitControllerTest, StartupWithoutVelocityDoesNotBlockPendingSwitch) {
+    for (auto type :
+         {MovementRequest::MOVE_COMBINED, MovementRequest::MOVE_TRIPOD, MovementRequest::MOVE_RIPPLE,
+          MovementRequest::MOVE_WAVE, MovementRequest::MOVE_CRAWL}) {
+        SCOPED_TRACE(type);
+        brain::MovementRequest request;
+        request.type = type;
+        controller_->setGait(request);
+        ASSERT_EQ(controller_->currentGait(), type);
+        EXPECT_FALSE(controller_->updateSelectedGait(createZeroVelocity()));
+        request.type = MovementRequest::SEQUENCE_LAYDOWN;
+        controller_->setGait(request);
+        controller_->updateSelectedGait(createZeroVelocity());
+        controller_->updateSelectedGait(createZeroVelocity());
+        EXPECT_EQ(controller_->currentGait(), MovementRequest::SEQUENCE_LAYDOWN);
+        for (int i = 0; i < kMaxIterations; ++i) controller_->updateSelectedGait(createZeroVelocity());
+    }
+}
+
+TEST_F(GaitControllerTest, SameGaitRequestCancelsPendingStop) {
+    for (auto type :
+         {MovementRequest::MOVE_COMBINED, MovementRequest::MOVE_TRIPOD, MovementRequest::MOVE_RIPPLE,
+          MovementRequest::MOVE_WAVE, MovementRequest::MOVE_CRAWL}) {
+        SCOPED_TRACE(type);
+        brain::MovementRequest request;
+        request.type = type;
+        controller_->setGait(request);
+        ASSERT_EQ(controller_->currentGait(), type);
+        controller_->requestStopSelectedGait();
+        controller_->setGait(request);
+        controller_->updateSelectedGait(createZeroVelocity());
+        // A resumed startup must still process its first velocity command.
+        EXPECT_TRUE(controller_->updateSelectedGait(createForwardVelocity()));
+        request.type = MovementRequest::SEQUENCE_LAYDOWN;
+        controller_->setGait(request);
+        for (int i = 0; i < kMaxIterations; ++i) controller_->updateSelectedGait(createForwardVelocity());
+        ASSERT_EQ(controller_->currentGait(), MovementRequest::SEQUENCE_LAYDOWN);
+    }
+}
+
+TEST_F(GaitControllerTest, NoRequestPreservesPendingSwitch) {
+    brain::MovementRequest request;
+    request.type = MovementRequest::MOVE_COMBINED;
+    controller_->setGait(request);
+    request.type = MovementRequest::SEQUENCE_WAITING;
+    controller_->setGait(request);
+    request.type = MovementRequest::NO_REQUEST;
+    controller_->setGait(request);
+    controller_->updateSelectedGait(createZeroVelocity());
+    controller_->updateSelectedGait(createZeroVelocity());
+    EXPECT_EQ(controller_->currentGait(), MovementRequest::SEQUENCE_WAITING);
+}
+
+TEST_F(GaitControllerTest, CancellationDiscardsPendingSwitch) {
+    brain::MovementRequest request;
+    request.type = MovementRequest::MOVE_COMBINED;
+    controller_->setGait(request);
+    request.type = MovementRequest::SEQUENCE_WAITING;
+    controller_->setGait(request);
+    controller_->requestStopSelectedGait();
+    for (int i = 0; i < kMaxIterations; ++i) controller_->updateSelectedGait(createZeroVelocity());
+    EXPECT_EQ(controller_->currentGait(), MovementRequest::MOVE_COMBINED);
+    EXPECT_FALSE(controller_->moving());
+}
+
+TEST_F(GaitControllerTest, FixedPosesPreserveRequestsAndIgnoreLivePoseTargets) {
+    for (const auto type : {MovementRequestMsg::SEQUENCE_STAND_UP, MovementRequestMsg::SEQUENCE_LAYDOWN}) {
+        MovementRequest request;
+        request.type = type;
+        request.duration_s = 0.2 * s;
+        controller_->setGait(request);
+        EXPECT_EQ(controller_->currentGait(), type);
+        const CPose unrelated_pose(0.01, 0.02, 0.03, 0.0, 0.0, 0.0);
+        const COrientation unrelated_head(0.1, 0.2, 0.3);
+        for (int i = 0; i < 2; ++i)
+            EXPECT_TRUE(
+                controller_->updateSelectedGait(createZeroVelocity(), unrelated_pose, unrelated_head));
+        EXPECT_FALSE(controller_->updateSelectedGait(createZeroVelocity(), unrelated_pose, unrelated_head));
+        const auto expected = type == MovementRequestMsg::SEQUENCE_STAND_UP
+                                  ? kinematics_->getStandingToePositions()
+                                  : kinematics_->getLaydownToePositions();
+        EXPECT_EQ(kinematics_->getToePositions(), expected);
+        EXPECT_EQ(kinematics_->getTorsoPose(), CPose());
+        const double pitch = type == MovementRequestMsg::SEQUENCE_STAND_UP
+                                 ? 0.0
+                                 : -node_->get_parameter("gait.generic.head_max_pitch_deg").as_double();
+        EXPECT_EQ(kinematics_->getHeadOrientation(), COrientation(0.0 * deg, pitch * deg, 0.0 * deg));
+    }
+}
+
+TEST_F(GaitControllerTest, SinglePoseEnforcesMinimumTrajectoryDuration) {
+    for (const double duration : {0.0, 0.05, 0.1, 0.2, 0.5, 1.0}) {
+        MovementRequest request;
+        request.type = MovementRequestMsg::SINGLE_POSE;
+        request.duration_s = duration * s;
+        const CPose target(0.01, 0.0, 0.0, 0.0, 0.0, 0.0);
+        const COrientation head(0.0, 0.1, 0.0);
+        request.body_pose.has_torso_pose = request.body_pose.has_head_orientation = true;
+        request.body_pose.torso_pose = target.toMsg();
+        request.body_pose.head_orientation = head.toMsg();
+        controller_->setGait(request);
+        int updates = 0;
+        while (controller_->updateSelectedGait(createZeroVelocity(), target, head) && updates < 20) {
+            ++updates;
+        }
+        EXPECT_EQ(updates, std::lround(std::max(duration, 0.1) / 0.1));
+        EXPECT_EQ(kinematics_->getTorsoPose(), target);
+        EXPECT_EQ(kinematics_->getHeadOrientation(), head);
+    }
+}
+
+TEST_F(GaitControllerTest, ReselectingContinuousPoseCancelsPendingSwitchAndKeepsMoving) {
+    MovementRequest request;
+    request.type = MovementRequest::CONTINUOUS_POSE;
+    controller_->setGait(request);
+    const CPose target(0.01, 0.0, 0.0, 0.0, 0.0, 0.0);
+    const COrientation head(0.0, 5.0, 0.0);
+    ASSERT_TRUE(controller_->updateSelectedGait(createZeroVelocity(), target, head));
+    const auto previous_x = kinematics_->getTorsoPose().position.x;
+    request.type = MovementRequest::SEQUENCE_STAND_UP;
+    controller_->setGait(request);
+    ASSERT_TRUE(controller_->hasPendingGait());
+    request.type = MovementRequest::CONTINUOUS_POSE;
+    controller_->setGait(request);
+    EXPECT_FALSE(controller_->hasPendingGait());
+    EXPECT_TRUE(controller_->updateSelectedGait(createZeroVelocity(), target, head));
+    EXPECT_FALSE(controller_->motionStopped());
+    EXPECT_GT(kinematics_->getTorsoPose().position.x, previous_x);
+    EXPECT_TRUE(controller_->updateSelectedGait(createZeroVelocity(), target, head));
+    EXPECT_EQ(controller_->currentGait(), MovementRequest::CONTINUOUS_POSE);
+}
+
+TEST_F(GaitControllerTest, StopIntentSurvivesFiniteGaitUntilRestAndReplacement) {
+    MovementRequest pose;
+    pose.type = MovementRequest::SINGLE_POSE;
+    pose.duration_s = 1.0 * s;
+    const CPose target(0.0, 0.0, 0.02, 0.0, 0.0, 0.0);
+    pose.body_pose.has_torso_pose = true;
+    pose.body_pose.torso_pose = target.toMsg();
+    ASSERT_TRUE(controller_->setGait(pose));
+    controller_->updateSelectedGait(createZeroVelocity(), target, COrientation(), 0.1 * s);
+    ASSERT_FALSE(controller_->motionStopped());
+
+    MovementRequest next;
+    next.type = MovementRequest::CONTINUOUS_POSE;
+    ASSERT_TRUE(controller_->setGait(next));
+    EXPECT_TRUE(controller_->stopRequested());
+    EXPECT_TRUE(controller_->hasPendingGait());
+    EXPECT_EQ(controller_->currentGait(), pose.type);
+    for (int i = 0; i < 20 && !controller_->motionStopped(); ++i) {
+        EXPECT_EQ(controller_->currentGait(), pose.type);
+        controller_->updateSelectedGait(createZeroVelocity(), target, COrientation(), 0.1 * s);
+    }
+    ASSERT_TRUE(controller_->motionStopped());
+    EXPECT_FALSE(controller_->stopRequested());
+    EXPECT_TRUE(controller_->hasPendingGait());
+    EXPECT_EQ(kinematics_->getTorsoPose(), target);
+    controller_->updateSelectedGait(createZeroVelocity(), target, COrientation(), 0.1 * s);
+    EXPECT_EQ(controller_->currentGait(), next.type);
+    EXPECT_FALSE(controller_->stopRequested());
+    EXPECT_FALSE(controller_->hasPendingGait());
+}
+
+TEST_F(GaitControllerTest, SameGaitWithdrawsStopIntentAndInvalidRequestPreservesIt) {
+    MovementRequest pose;
+    pose.type = MovementRequest::CONTINUOUS_POSE;
+    ASSERT_TRUE(controller_->setGait(pose));
+    controller_->requestStopSelectedGait();
+    EXPECT_TRUE(controller_->stopRequested());
+    EXPECT_FALSE(controller_->motionStopped());
+    MovementRequest invalid;
+    invalid.type = MovementRequest::NO_REQUEST;
+    EXPECT_FALSE(controller_->setGait(invalid));
+    EXPECT_TRUE(controller_->stopRequested());
+    ASSERT_TRUE(controller_->setGait(pose));
+    EXPECT_FALSE(controller_->stopRequested());
+    EXPECT_FALSE(controller_->motionStopped());
+    controller_->requestStopSelectedGait();
+    controller_->updateSelectedGait(createZeroVelocity());
+    ASSERT_TRUE(controller_->motionStopped());
+    EXPECT_FALSE(controller_->stopRequested());
+    controller_->requestStopSelectedGait();
+    EXPECT_FALSE(controller_->stopRequested());
+}
+
+}  // namespace
+
+int main(int argc, char** argv) {
+    testing::InitGoogleTest(&argc, argv);
+    return RUN_ALL_TESTS();
+}

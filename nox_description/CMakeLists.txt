@@ -1,0 +1,17 @@
+cmake_minimum_required(VERSION 3.25)
+project(nox_description)
+
+find_package(ament_cmake REQUIRED)
+
+install(DIRECTORY
+  urdf launch rviz meshes config
+  DESTINATION share/${PROJECT_NAME}/
+)
+
+if(BUILD_TESTING)
+  find_package(ament_cmake_pytest REQUIRED)
+  ament_add_pytest_test(test_nox_urdf test/test_nox_urdf.py)
+  ament_add_pytest_test(test_leg_collision test/test_leg_collision.py)
+endif()
+
+ament_package()

@@ -1,0 +1,122 @@
+{
+    "commandLookLeft": {
+        "doing": [ "sieh", "sehe", "schau", "schaue" ],
+        "preposition": [ "nach" ],
+        "direction": [ "links" ]
+    },
+    "commandLookRight": {
+        "doing": [ "sieh", "sehe", "schau", "schaue" ],
+        "preposition": [ "nach" ],
+        "direction": [ "rechts" ]
+    },
+    "commandWatch": {
+        "doing": [ "sieh", "schau", "schaue", "sehe", "seh" ],
+        "pronoun": [ "dich" ],
+        "preposition": [ "um" ]
+    },
+    "commandDanceHotDogsForBreakfast": {
+        "doing": [ "tanz", "tanze" ],
+        "noun": [ "hot", "dogs", "breakfast" ]
+    },
+    "commandDanceExcessParty": {
+        "doing": [ "tanz", "tanze" ],
+        "noun": [ "excess", "party", "partie" ]
+    },
+    "commandDanceDancingStreet": {
+        "doing": [ "tanz", "tanze" ],
+        "noun": [ "dancing", "street", "straße", "strasse" ]
+    },
+    "commandDance": {
+        "doing": [ "tanz", "tanze" ],
+        "noun": [ "standard", "standardtanz" ]
+    },
+    "commandRun": {
+        "doing": [ "renn", "renne", "flitz", "flitze" ],
+        "direction": [ "vorn", "vorne", "hinten", "links", "rechts" ]
+    },
+    "commandMove": {
+        "doing": [ "fahr", "fahre", "beweg", "bewege", "lauf", "laufe", "dreh", "drehe", "geh", "gehe" ],
+        "direction": [ "vorn", "vorne", "hinten", "links", "rechts" ]
+    },
+    "commandWalkDemo": {
+        "doing": [ "test", "teste" ],
+        "noun": [ "gang" ]
+    },
+    "commandStopMove": {
+        "doing": [ "halt", "halte", "stop", "stopp", "stoppe" ],
+        "noun": [ "bewegung" ]
+    },
+    "commandStandup": {
+        "doing": [ "steh", "stehe" ],
+        "preposition": [ "auf" ]
+    },
+    "commandLaydown": {
+        "doing": [ "leg", "lege", "setz" ],
+        "pronoun": [ "dich" ],
+        "preposition": [ "hin" ]
+    },
+    "commandHighFive": {
+        "doing": [ "gib" ],
+        "pronoun": [ "mir" ],
+        "noun": [ "five" ]
+    },
+    "commandBodyRoll": {
+        "doing": [ "roll", "rolle" ],
+        "noun": [ "rumpf" ]
+    },
+    "commandLegWave": {
+        "doing": [ "bein", "beine" ],
+        "noun": [ "welle" ]
+    },
+    "commandBite": {
+        "doing": [ "beiß", "beiße", "beiss", "beisse" ]
+    },
+    "commandStomp": {
+        "doing": [ "stampf", "stampfe" ]
+    },
+    "commandClap": {
+        "doing": [ "klatsch", "klatsche" ]
+    },
+    "commandCalibrate": {
+        "doing": [ "kalibrier", "kalibriere" ]
+    },
+    "commandNeutral": {
+        "doing": [ "geh", "gehe" ],
+        "noun": [ "neutral", "neutralposition", "grundstellung", "ausgangsposition" ]
+    },
+    "commandTestBody": {
+        "doing": [ "test", "teste" ],
+        "bodyPart": [ "body", "rumpf" ]
+    },
+    "commandTestLegs": {
+        "doing": [ "test", "teste" ],
+        "bodyPart": [ "bein", "beine" ]
+    },
+    "tellMeSupplyVoltage": {
+        "doing": [ "sag", "ist" ],
+        "noun": [ "batterie", "spannung" ],
+        "bodyPart": [ "versorgung" ]
+    },
+    "tellMeServoVoltage": {
+        "doing": [ "sag", "ist" ],
+        "noun": [ "batterie", "spannung" ],
+        "bodyPart": [ "servo" ]
+    },
+    "tellMeServoTemperature": {
+        "doing": [ "sag", "ist" ],
+        "noun": [ "temperatur", "warm" ],
+        "bodyPart": [ "servo" ]
+    },
+    "musicOn": {
+        "doing": [ "spiel", "spiele", "sing", "singe" ],
+        "noun": [ "musik", "lied" ]
+    },
+    "musicOff": {
+        "doing": [ "stop", "stoppe", "halt" ],
+        "noun": [ "musik", "lied" ]
+    },
+    "talk": {
+        "doing": [ "sag", "sage", "sprich" ],
+        "noun": [ "wort" ]
+    }
+}

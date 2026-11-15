@@ -1,0 +1,10 @@
+# Stop music and run the built-in standup transition in the same action group.
+name: standup
+trigger:
+  joystick: dpad_vertical_up
+  voice: commandStandup
+actions:
+  - music: STOP
+    movement:
+      name: SEQUENCE_STAND_UP
+      duration_s: 1.5

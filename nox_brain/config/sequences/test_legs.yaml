@@ -1,0 +1,10 @@
+# Run the built-in leg test with a spoken announcement; the gait defines the leg motions.
+name: test_legs
+trigger:
+  joystick: dpad_horizontal_left
+  voice: commandTestLegs
+actions:
+  - say: Ich teste die Beine
+    movement:
+      name: SEQUENCE_TESTLEGS
+      duration_s: 3.0

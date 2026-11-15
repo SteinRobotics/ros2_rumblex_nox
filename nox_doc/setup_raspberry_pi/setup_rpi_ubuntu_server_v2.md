@@ -1,0 +1,107 @@
+> Für Ubuntu Server 26.04 auf dem Raspberry Pi 5: [automatisiertes Setup](setup_ubuntu_26.04.md).
+> Die folgenden manuellen Schritte beschreiben die ältere Kilted-Installation.
+
+# Initial Setup
+## WiFi Connection
+```
+sudo cat /etc/netplan/50-cloud-init.yaml
+__
+network:
+  version: 2
+  wifis:
+    wlan0:
+      optional: true
+      dhcp4: true
+      access-points:
+        "XXXXXXXXXXXX":
+          auth:
+            key-management: "psk"
+            password: "YYYYYYYYYYYYY"
+        "InnoWorX_1":
+          password: "AAAAAA"
+        "ChristianHotspot":
+          password: "AAAAAA"
+
+
+__
+
+sudo apt update
+sudo apt upgrade
+sudo reboot
+sudo shutdown -h now
+mkdir Workspace
+```
+
+____
+## install Workspace
+### install ROS2
+```
+mkdir colcon_nox
+cd colcon_nox/
+mkdir src
+cd src/
+locale  # check for UTF-8
+sudo apt update && sudo apt install locales
+sudo locale-gen en_US en_US.UTF-8
+sudo update-locale LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8
+export LANG=en_US.UTF-8
+locale  # verify settings
+sudo apt install software-properties-common
+sudo add-apt-repository universe
+sudo apt update && sudo apt install curl -y
+export ROS_APT_SOURCE_VERSION=$(curl -s https://api.github.com/repos/ros-infrastructure/ros-apt-source/releases/latest | grep -F "tag_name" | awk -F\" '{print $4}')
+curl -L -o /tmp/ros2-apt-source.deb "https://github.com/ros-infrastructure/ros-apt-source/releases/download/${ROS_APT_SOURCE_VERSION}/ros2-apt-source_${ROS_APT_SOURCE_VERSION}.$(. /etc/os-release && echo ${UBUNTU_CODENAME:-${VERSION_CODENAME}})_all.deb"
+sudo dpkg -i /tmp/ros2-apt-source.deb
+sudo apt update && sudo apt install ros-dev-tools
+sudo apt update
+sudo apt upgrade
+sudo apt install ros-kilted-ros-base
+```
+
+### install rumblex 
+```
+git clone https://github.com/SteinRobotics/ros2_rumblex_nox.git
+cd ros2_rumblex_nox/
+git checkout develop 
+git pull
+sudo rosdep init
+rosdep update
+sudo apt install python3-pip
+PIP_BREAK_SYSTEM_PACKAGES=1 rosdep install --from-paths ~/Workspace/colcon_nox --ignore-src -r -y
+git clone https://github.com/garmin/LIDARLite_RaspberryPi_Library.git
+sudo apt install libmagicenum-dev
+nano ~/Workspace/colcon_nox/src/ros2_rumblex_nox/nox_lidar_1d/src/LIDARLite_RaspberryPi_Library/include/lidarlite_v3.h
+```
+
+Aktuelle Source- und Build-Kommandos: [BUILD.md](../../BUILD.md).
+Diese gelten für Lyrical; die übrigen Schritte hier sind historische Kilted-Notizen.
+
+### install dependencies
+```
+sudo apt install python3-pygame
+python3 -m pip install --break-system-packages pyttsx3 google-cloud-speech sounddevice SpeechRecognition pyyaml
+sudo apt install -y portaudio19-dev python3-pyaudio
+sudo pip3 install adafruit-circuitpython-ssd1306 --break-system-packages
+sudo pip3 install adafruit-circuitpython-bno055 --break-system-packages
+```
+
+___
+## Sound settings:
+```
+wpctl get-volume @DEFAULT_AUDIO_SINK@
+wpctl set-volume @DEFAULT_AUDIO_SINK@ 0.90
+wpctl status
+```
+___  
+## Shutdown and service permissions
+
+For current user-service commands and password-free shutdown/reboot configuration,
+see [the Ubuntu 26.04 guide](setup_ubuntu_26.04.md#herunterfahren-neustart-und-sudo-rechte).
+Use the actual login user (`nox` on Nox), rather than copying a rule for `rumblex`.
+`NOPASSWD` still requires `sudo`. `/sbin/restart` does not exist on Nox.
+Manage the current robot service with `systemctl --user`, without sudo.
+
+
+## Autostart Service
+sudo loginctl enable-linger rumblex
+For offline robot-name recognition, follow the [openWakeWord ONNX setup](../../nox_communication/readme.md) before launching communication.
