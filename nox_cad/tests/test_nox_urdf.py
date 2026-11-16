@@ -17,8 +17,9 @@ spec = importlib.util.spec_from_file_location(
 )
 description = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(description)
-from robot_nox import assembly_coxa, assembly_femur, assembly_tibia, assembly_head
-from robot_nox import assembly_torso_with_servos, torso_common
+from robot_nox import assembly_coxa, assembly_femur, assembly_head, assembly_torso_with_servos
+from robot_nox import assembly_tibia
+from robot_nox import torso_common
 from common import servo_simplified
 
 

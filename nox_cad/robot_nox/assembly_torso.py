@@ -116,7 +116,7 @@ def build_assembly() -> Compound:
             spacer_instances.append(instance)
 
     assembly = Compound(
-        label="assembly_body",
+        label="assembly_torso",
         children=[
             torso_layer_0_part,
             torso_layer_1_part,
@@ -137,9 +137,9 @@ def main() -> None:
     assembly = build_assembly()
     EXPORT_DIR.mkdir(parents=True, exist_ok=True)
     (EXPORT_DIR / "step").mkdir(parents=True, exist_ok=True)
-    export_step(assembly, str(EXPORT_DIR / "step/assembly_body.step"))
+    export_step(assembly, str(EXPORT_DIR / "step/assembly_torso.step"))
 
-    show(assembly, name="assembly_body", clear=True)
+    show(assembly, name="assembly_torso", clear=True)
 
 
 if __name__ == "__main__":

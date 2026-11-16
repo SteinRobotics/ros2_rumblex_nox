@@ -55,8 +55,8 @@ nox_communication/soundfiles/
 nox_communication/tts_cache/
 nox_communication/keys/
 nox_communication/models/
-nox_description/cad/imported/
-nox_description/cad/generated/
+nox_cad/imported/
+nox_cad/generated/
 
 build/
 log/

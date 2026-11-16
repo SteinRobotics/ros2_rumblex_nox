@@ -2,7 +2,21 @@
 
 `robot_nox.py` and `robot_nox/` contain the complete robot assembly and its
 components. `boards/`, `common/` and `utils/` provide the helpers used by this model.
-Use a local `.venv` with build123d and the dependencies in `requirements-laser.txt`.
+Create a local CAD environment with Python 3.11–3.14:
+
+```bash
+python3 -m venv .venv
+.venv/bin/python -I -m pip install --upgrade pip
+.venv/bin/python -I -m pip install -r requirements-cad.txt
+source .venv/bin/activate
+```
+
+This includes build123d, OCP CAD Viewer, IPython kernel support, and the laser-cutting
+dependencies in `requirements-laser.txt`. In VS Code, select `.venv/bin/python`
+as the Python interpreter and use OCP CAD Viewer extension version 4.2.x to match
+the Python viewer package.
+The `-I` flag keeps pip isolated from packages exposed by a sourced ROS environment.
+
 Imported vendor assets and generated exports are local, ignored files; obtain any
 required vendor geometry separately. Tracked runtime meshes remain in `../meshes/nox/`.
 

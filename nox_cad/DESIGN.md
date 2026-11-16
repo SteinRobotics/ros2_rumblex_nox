@@ -41,7 +41,7 @@ vendor-servo examples also retain their original offsets.
 
 `urdf/nox_mesh.urdf.xacro` and `urdf/mesh_leg.xacro` register the existing
 Nox STL exports to the CAD horn mounting faces. The torso uses the checked-in
-`meshes/nox/assembly_body_servo.stl`. Zero joint angles reproduce the complete
+`meshes/nox/assembly_torso_servo.stl`. Zero joint angles reproduce the complete
 CAD assembly's leg angles (0/0/180 degrees) and head pitch (-60 degrees).
 Positive URDF joint angles increase the corresponding CAD connection angle.
 These joint frames differ from the simplified IK frames in `nox.urdf.xacro`;
