@@ -4,6 +4,10 @@ Independent ROS 2 repository for the Nox hexapod. This repository contains
 only Nox's hardware configuration, software, robot models and CAD.
 Shared algorithms are maintained here independently. See [source provenance](PROVENANCE.md).
 
+[![Three-quarter CAD view of the assembled Nox hexapod](nox_doc/pics/nox-assembly.webp)](nox_description/meshes/nox/assembly_complete.stl)
+
+[Open the complete robot model (STL)](nox_description/meshes/nox/assembly_complete.stl)
+
 ## Getting started
 
 Use Ubuntu 26.04 with ROS 2 Lyrical, C++23 and CMake 3.25 or newer.
@@ -26,7 +30,7 @@ Core packages are `nox_brain`, `nox_movement`, `nox_interfaces`,
 
 Nox uses Hiwonder servos, Garmin 1D lidar and head-scan perception.
 See [sensors](SENSORS.md), [bill of materials](BOM_NOX.md), and
-[CAD](nox_description/cad/README.md).
+[CAD](nox_cad/README.md).
 
 ## Interfaces and configuration
 
